@@ -1,4 +1,4 @@
-## BG playground
+## boltzmann-generator-playground
 
 This is a playground of [Boltzmann Generator](https://science.sciencemag.org/content/365/6457/eaaw1147) codes. Here is the plan:
 
