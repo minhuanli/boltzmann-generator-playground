@@ -1,7 +1,7 @@
 __author__ = 'noe'
 
 from deep_boltzmann.util import ensure_traj
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 import numpy as np
 import keras
 
