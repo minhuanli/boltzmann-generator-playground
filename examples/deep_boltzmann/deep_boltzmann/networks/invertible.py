@@ -758,6 +758,7 @@ def invnet(dim, layer_types, energy_model=None, channels=None,
             r RealNVP layer, share parameters with last layer
             S Scaling layer
             W Whiten layer
+            I MixedCoordinatesLayer
             P Permute layer
             Z Split dimensions off to latent space, leads to a merge and 3-way split.
         Splitting and merging layers will be added automatically
