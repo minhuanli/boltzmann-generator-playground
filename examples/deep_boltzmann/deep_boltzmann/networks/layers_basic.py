@@ -51,7 +51,7 @@ def nonlinear_transform(output_size, nlayers=3, nhidden=100, activation='relu', 
     return M
 
 
-class ResampleLayer(keras.engine.Layer):
+class ResampleLayer(keras.layers.Layer):
     """
     Receives as inputs latent space encodings z and normal noise w. Transforms w to
     Match the mean and the standard deviations of z.
@@ -81,7 +81,7 @@ class ResampleLayer(keras.engine.Layer):
         return input_shape[0], self.dim
 
 
-class IndexLayer(keras.engine.Layer):
+class IndexLayer(keras.layers.Layer):
     def __init__(self, indices, **kwargs):
         """ Returns [:, indices].
         """
