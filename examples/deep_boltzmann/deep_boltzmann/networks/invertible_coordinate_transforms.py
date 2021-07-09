@@ -1,16 +1,16 @@
 import numpy as np
 import tensorflow as tf
 import keras
-from tensorflow.python.ops.parallel_for.gradients import batch_jacobian
+#from tensorflow.python.ops.parallel_for.gradients import batch_jacobian
 from deep_boltzmann.networks import IndexLayer
 
 
-def log_det_jacobian(outputs, inputs):
-    from tensorflow.python.ops.parallel_for.gradients import batch_jacobian
-    J = batch_jacobian(outputs, inputs, use_pfor=False)
-    s = tf.svd(J, compute_uv=False)
-    s = tf.abs(s) + 1e-6  # regularize
-    return tf.reduce_sum(tf.log(s), axis=1, keepdims=True)
+# def log_det_jacobian(outputs, inputs):
+#     from tensorflow.python.ops.parallel_for.gradients import batch_jacobian
+#     J = batch_jacobian(outputs, inputs, use_pfor=False)
+#     s = tf.svd(J, compute_uv=False)
+#     s = tf.abs(s) + 1e-6  # regularize
+#     return tf.reduce_sum(tf.log(s), axis=1, keepdims=True)
 
 
 def pca(X0, keepdims=None):
@@ -349,12 +349,14 @@ def ics2xyz_local_log_det_jac(ics, Z_indices, index2zorder, xyz):
     log_det_jac = tf.zeros((batchsize,))
 
     for i in range(Z_indices.shape[0]):
-        args = ics[:, 3*i:3*i+3]
-        xyz.append(ic2xyz(xyz[index2zorder[Z_indices[i, 1]]],
-                          xyz[index2zorder[Z_indices[i, 2]]],
-                          xyz[index2zorder[Z_indices[i, 3]]],
-                          args[:, 0:1], args[:, 1:2], args[:, 2:3]))
-        log_det_jac += tf.linalg.slogdet(batch_jacobian(xyz[-1], args))[-1]
+        with tf.GradientTape(persistent=True) as tape_i:
+            args = ics[:, 3*i:3*i+3]
+            tape_i.watch(args)
+            xyz.append(ic2xyz(xyz[index2zorder[Z_indices[i, 1]]],
+                            xyz[index2zorder[Z_indices[i, 2]]],
+                            xyz[index2zorder[Z_indices[i, 3]]],
+                            args[:, 0:1], args[:, 1:2], args[:, 2:3]))
+        log_det_jac += tf.linalg.slogdet(tape_i.batch_jacobian(xyz[-1], args))[-1]
 
     return log_det_jac
 
@@ -429,7 +431,7 @@ def ics2xyz_local_log_det_jac_batchexpand(ics, Z_indices, index2zorder, xyz, eps
         IC matrix flattened by atom to place (bond1, angle1, torsion1, bond2, angle2, torsion2, ...)
 
     """
-    from tensorflow.python.ops.parallel_for.gradients import batch_jacobian
+    #from tensorflow.python.ops.parallel_for.gradients import batch_jacobian
     from deep_boltzmann.networks.invertible_coordinate_transforms import ic2xyz
     batchsize = tf.shape(ics)[0]
     natoms_to_place = Z_indices.shape[0]
@@ -438,14 +440,15 @@ def ics2xyz_local_log_det_jac_batchexpand(ics, Z_indices, index2zorder, xyz, eps
     p1s = tf.reshape(tf.gather(xyz, index2zorder[Z_indices[:, 1]], axis=1), (batchsize*natoms_to_place, 3))
     p2s = tf.reshape(tf.gather(xyz, index2zorder[Z_indices[:, 2]], axis=1), (batchsize*natoms_to_place, 3))
     p3s = tf.reshape(tf.gather(xyz, index2zorder[Z_indices[:, 3]], axis=1), (batchsize*natoms_to_place, 3))
-    ics_ = tf.reshape(ics, (batchsize*natoms_to_place, 3))
-
-    # operation to differentiate: compute new xyz's given distances, angles, torsions
-    newpos_batchexpand = ic2xyz(p1s, p2s, p3s, ics_[:, 0:1], ics_[:, 1:2], ics_[:, 2:3])
+    with tf.GradientTape(persistent=True) as tape:          
+        ics_ = tf.reshape(ics, (batchsize*natoms_to_place, 3))
+        tape.watch(ics_)
+        # operation to differentiate: compute new xyz's given distances, angles, torsions
+        newpos_batchexpand = ic2xyz(p1s, p2s, p3s, ics_[:, 0:1], ics_[:, 1:2], ics_[:, 2:3])
     newpos = tf.reshape(newpos_batchexpand, (batchsize, natoms_to_place, 3))
 
     # compute derivatives
-    log_det_jac_batchexpand = tf.linalg.slogdet(batch_jacobian(newpos_batchexpand, ics_))[-1]
+    log_det_jac_batchexpand = tf.linalg.slogdet(tape.batch_jacobian(newpos_batchexpand, ics_))[-1]
 
     # reshape atoms again out of batch and sum over the log det jacobians
     log_det_jac = tf.reshape(log_det_jac_batchexpand, (batchsize, natoms_to_place))
@@ -496,20 +499,24 @@ def ics2xyz_global_log_det_jac(ics, Z_indices, global_transform=True):
         xyz.append(tf.zeros((batchsize, 3)))
 
         # second atom at 0,0,d
-        args = tf.reshape(ics[:, 0:1], (batchsize, 1))
-        xyz.append(tf.concat([tf.zeros((batchsize, 2)), args], axis=-1))
-        z = xyz[-1][:, -1:]
+        with tf.GradientTape(persistent=True) as tape:
+            args = tf.reshape(ics[:, 0:1], (batchsize, 1))
+            tape.watch(args)
+            xyz.append(tf.concat([tf.zeros((batchsize, 2)), args], axis=-1))
+            z = xyz[-1][:, -1:]
 
-        log_det_jac += tf.linalg.slogdet(batch_jacobian(z, args))[-1]
+        log_det_jac += tf.linalg.slogdet(tape.batch_jacobian(z, args))[-1]
 
         # third atom at x,0,z
-        args = tf.concat([ics[:, 1:2], ics[:, 2:3]], axis=-1)
-        xyz.append(ic2xy0(xyz[index2zorder[Z_indices[2, 1]]],
-                          xyz[index2zorder[Z_indices[2, 2]]],
-                          args[..., 0:1], args[..., 1:2]))
-        xz = tf.stack([xyz[-1][:, 0], xyz[-1][:, 2]], axis=-1)
+        with tf.GradientTape(persistent=True) as tape1:
+            args = tf.concat([ics[:, 1:2], ics[:, 2:3]], axis=-1)
+            tape1.watch(args)
+            xyz.append(ic2xy0(xyz[index2zorder[Z_indices[2, 1]]],
+                            xyz[index2zorder[Z_indices[2, 2]]],
+                            args[..., 0:1], args[..., 1:2]))
+            xz = tf.stack([xyz[-1][:, 0], xyz[-1][:, 2]], axis=-1)
         #  + 1e-6*tf.eye(2, num_columns=2, batch_shape=(1,)
-        log_det_jac += tf.linalg.slogdet(batch_jacobian(xz, args))[-1]
+        log_det_jac += tf.linalg.slogdet(tape1.batch_jacobian(xz, args))[-1]
 
     # other atoms
     log_det_jac += ics2xyz_local_log_det_jac(
@@ -539,20 +546,22 @@ def xyz2ic_log_det_jac(x, Z_indices, eps=1e-10):
         x_ = reference_atom[:, 0]
         y_ = reference_atom[:, 1]
         z_ = reference_atom[:, 2]
+        
+        with tf.GradientTape(persistent=True) as tape_0: 
+            arg = tf.expand_dims(z_, axis=1)
+            tape_0.watch(arg)
+            reference_atom0 = tf.stack([x_, y_, arg[:, 0]], axis=-1)
 
-        arg = tf.expand_dims(z_, axis=1)
-        reference_atom = tf.stack([x_, y_, arg[:, 0]], axis=-1)
+            reference_atom0 = tf.expand_dims(reference_atom0, axis=1)
+            other_atom = tf.expand_dims(other_atom, axis=1)
 
-        reference_atom = tf.expand_dims(reference_atom, axis=1)
-        other_atom = tf.expand_dims(other_atom, axis=1)
+            bond = dist_tf(
+                reference_atom0,
+                other_atom
+            )
 
-        bond = dist_tf(
-            reference_atom,
-            other_atom
-        )
-
-        out = bond
-        jac = batch_jacobian(out, arg) + eps * tf.eye(3, batch_shape=(1,))
+            out = bond
+        jac = tape_0.batch_jacobian(out, arg) + eps * tf.eye(3, batch_shape=(1,))
         log_det_jac += tf.linalg.slogdet(jac)[-1]
 
         # 2. bond/angle (input: x/z axes)
@@ -564,24 +573,26 @@ def xyz2ic_log_det_jac(x, Z_indices, eps=1e-10):
         y_ = reference_atom[:, 1]
         z_ = reference_atom[:, 2]
 
-        arg = tf.stack([x_, z_], axis=-1)
-        reference_atom = tf.stack([arg[:, 0], y_, arg[:, 1]], axis=-1)
+        with tf.GradientTape(persistent=True) as tape_1:
+            arg = tf.stack([x_, z_], axis=-1)
+            tape_1.watch(arg)
+            reference_atom_1 = tf.stack([arg[:, 0], y_, arg[:, 1]], axis=-1)
 
-        reference_atom = tf.expand_dims(reference_atom, axis=1)
-        other_atom_1 = tf.expand_dims(other_atom_1, axis=1)
-        other_atom_2 = tf.expand_dims(other_atom_2, axis=1)
+            reference_atom_1 = tf.expand_dims(reference_atom_1, axis=1)
+            other_atom_1 = tf.expand_dims(other_atom_1, axis=1)
+            other_atom_2 = tf.expand_dims(other_atom_2, axis=1)
 
-        bond = dist_tf(
-            reference_atom,
-            other_atom_1
-        )
-        angle = angle_tf(
-            reference_atom,
-            other_atom_1,
-            other_atom_2
-        )
-        out = tf.stack([bond, angle], axis=-1)
-        jac = batch_jacobian(out, arg) + eps * tf.eye(3, batch_shape=(1,))
+            bond = dist_tf(
+                reference_atom_1,
+                other_atom_1
+            )
+            angle = angle_tf(
+                reference_atom_1,
+                other_atom_1,
+                other_atom_2
+            )
+            out = tf.stack([bond, angle], axis=-1)
+        jac = tape_1.batch_jacobian(out, arg) + eps * tf.eye(3, batch_shape=(1,))
 
         log_det_jac_ = tf.linalg.slogdet(jac)[-1]
         log_det_jac_ = tf.reshape(log_det_jac_, [batchsize, -1])
@@ -595,28 +606,29 @@ def xyz2ic_log_det_jac(x, Z_indices, eps=1e-10):
     other_atoms_1 = tf.gather(x, atom_indices[Z_indices[start_rest:, 1]], axis=1)
     other_atoms_2 = tf.gather(x, atom_indices[Z_indices[start_rest:, 2]], axis=1)
     other_atoms_3 = tf.gather(x, atom_indices[Z_indices[start_rest:, 3]], axis=1)
-
-    arg = tf.reshape(reference_atoms, [-1, 3])
-    reference_atoms = tf.reshape(arg, [batchsize, -1, 3])
-
-    bond = dist_tf(
-        reference_atoms,
-        other_atoms_1
-    )
-    angle = angle_tf(
-        reference_atoms,
-        other_atoms_1,
-        other_atoms_2
-    )
-    torsion = torsion_tf(
-        reference_atoms,
-        other_atoms_1,
-        other_atoms_2,
-        other_atoms_3
-    )
-    out = tf.stack([bond, angle, torsion], axis=-1)
-    out = tf.reshape(out, [-1, 3])
-    jac = batch_jacobian(out, arg, use_pfor=False) # + eps * tf.eye(3, batch_shape=(1,)
+    
+    with tf.GradientTape(persistent=True) as tape:
+        arg = tf.reshape(reference_atoms, [-1, 3])
+        tape.watch(arg)
+        reference_atoms_a = tf.reshape(arg, [batchsize, -1, 3])
+        bond = dist_tf(
+            reference_atoms_a,
+            other_atoms_1
+        )
+        angle = angle_tf(
+            reference_atoms_a,
+            other_atoms_1,
+            other_atoms_2
+        )
+        torsion = torsion_tf(
+            reference_atoms_a,
+            other_atoms_1,
+            other_atoms_2,
+            other_atoms_3
+        )
+        out = tf.stack([bond, angle, torsion], axis=-1)
+        out = tf.reshape(out, [-1, 3])
+    jac = tape.batch_jacobian(out, arg, experimental_use_pfor=False) # + eps * tf.eye(3, batch_shape=(1,)
 
     log_det_jac_ = tf.linalg.slogdet(jac)[-1]
     log_det_jac_ = tf.reshape(log_det_jac_, [batchsize, -1])
@@ -689,7 +701,7 @@ class InternalCoordinatesTransformation(object):
         self.output_z_only = keras.layers.Lambda(lambda x: self.x2z(x))(x)
         junk_dims = 6
         self.output_z = keras.layers.Lambda(
-                lambda z: tf.concat([z, 0. * tf.random_normal([tf.shape(z)[0], junk_dims], stddev=1.)], 1))(self.output_z_only)
+                lambda z: tf.concat([z, 0. * tf.random.normal([tf.shape(z)[0], junk_dims], stddev=1.)], 1))(self.output_z_only)
 
         # self.log_det_xz = keras.layers.Lambda(lambda x: log_det_jacobian(self.x2z(x), x))(self.input_x)
         self.log_det_xz = keras.layers.Lambda(lambda x: self.x2z_jacobian(x))(self.input_x)
