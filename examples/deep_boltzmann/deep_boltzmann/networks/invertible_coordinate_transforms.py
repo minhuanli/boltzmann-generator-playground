@@ -264,8 +264,8 @@ def ic2xyz(p1, p2, p3, d14, a124, t1234):
     v1 = p1 - p2
     v2 = p1 - p3
 
-    n = tf.cross(v1, v2)
-    nn = tf.cross(v1, n)
+    n = tf.linalg.cross(v1, v2)
+    nn = tf.linalg.cross(v1, n)
     n /= tf.norm(n, axis=1, keepdims=True)
     nn /= tf.norm(nn, axis=1, keepdims=True)
 
