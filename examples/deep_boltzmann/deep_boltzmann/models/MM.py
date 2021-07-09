@@ -75,7 +75,7 @@ def torsion_tf(x1, x2, x3, x4, degrees=True):
     # angle between v and w in a plane is the torsion angle
     # v and w may not be normalized but that's fine since tan is y/x
     x = tf.reduce_sum(v*w, axis=2)
-    b1xv = tf.cross(b1, v)
+    b1xv = tf.linalg.cross(b1, v)
     y = tf.reduce_sum(b1xv*w, axis=2)
     if degrees:
         return np.float32(180.0 / np.pi) * tf.atan2(y, x)
