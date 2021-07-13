@@ -72,9 +72,9 @@ class InvNet(object):
 
             else:
 
-                self.log_det_xz = keras.layers.Add()(log_det_xzs)
+                self.log_det_xz = tf.keras.layers.Add()(log_det_xzs)
 
-            self.TxzJ = keras.models.Model(inputs=self.input_x, outputs=[self.output_z, self.log_det_xz])
+            self.TxzJ = tf.keras.models.Model(inputs=self.input_x, outputs=[self.output_z, self.log_det_xz])
 
         # compute total Jacobian for z->x transformation
 
@@ -98,9 +98,9 @@ class InvNet(object):
 
             else:
 
-                self.log_det_zx = keras.layers.Add()(log_det_zxs)
+                self.log_det_zx = tf.keras.layers.Add()(log_det_zxs)
 
-            self.TzxJ = keras.models.Model(inputs=self.input_z, outputs=[self.output_x, self.log_det_zx])
+            self.TzxJ = tf.keras.models.Model(inputs=self.input_z, outputs=[self.output_x, self.log_det_zx])
 
 
 
@@ -116,7 +116,7 @@ class InvNet(object):
 
         if clear_session:
 
-            keras.backend.clear_session()
+            tf.keras.backend.clear_session()
 
         D = load_obj(filename)
 
@@ -218,7 +218,7 @@ class InvNet(object):
 
         # X -> Z
 
-        self.input_x = keras.layers.Input(shape=(self.dim,))
+        self.input_x = tf.keras.layers.Input(shape=(self.dim,))
 
         self.output_z = self.connect_xz(self.input_x)
 
@@ -228,7 +228,7 @@ class InvNet(object):
 
         # Z -> X
 
-        self.input_z = keras.layers.Input(shape=(self.dim,))
+        self.input_z = tf.keras.layers.Input(shape=(self.dim,))
 
         self.output_x = self.connect_zx(self.input_z)
 
@@ -238,9 +238,9 @@ class InvNet(object):
 
         # build networks
 
-        self.Txz = keras.models.Model(inputs=self.input_x, outputs=self.output_z)
+        self.Txz = tf.keras.models.Model(inputs=self.input_x, outputs=self.output_z)
 
-        self.Tzx = keras.models.Model(inputs=self.input_z, outputs=self.output_x)
+        self.Tzx = tf.keras.models.Model(inputs=self.input_z, outputs=self.output_x)
 
 
 
@@ -540,11 +540,11 @@ class InvNet(object):
 
             if clipnorm is None:
 
-                optimizer = keras.optimizers.adam(lr=lr)
+                optimizer = tf.keras.optimizers.Adam(lr=lr)
 
             else:
 
-                optimizer = keras.optimizers.adam(lr=lr, clipnorm=clipnorm)
+                optimizer = tf.keras.optimizers.Adam(lr=lr, clipnorm=clipnorm)
 
 
 
@@ -898,7 +898,7 @@ class EnergyInvNet(InvNet):
 
         if clear_session:
 
-                keras.backend.clear_session()
+                tf.keras.backend.clear_session()
 
         D = load_obj(filename)
 
@@ -1180,11 +1180,11 @@ class EnergyInvNet(InvNet):
 
             if clipnorm is None:
 
-                optimizer = keras.optimizers.adam(lr=lr)
+                optimizer = tf.keras.optimizers.Adam(lr=lr)
 
             else:
 
-                optimizer = keras.optimizers.adam(lr=lr, clipnorm=clipnorm)
+                optimizer = tf.keras.optimizers.Adam(lr=lr, clipnorm=clipnorm)
 
 
 
@@ -1467,17 +1467,17 @@ class EnergyInvNet(InvNet):
 
             if clipnorm is None:
 
-                optimizer = keras.optimizers.adam(lr=lr)
+                optimizer = tf.keras.optimizers.Adam(lr=lr)
 
             else:
 
-                optimizer = keras.optimizers.adam(lr=lr, clipnorm=clipnorm)
+                optimizer = tf.keras.optimizers.Adam(lr=lr, clipnorm=clipnorm)
 
 
 
         # assemble model
 
-        dual_model = keras.models.Model(inputs=inputs, outputs=outputs)
+        dual_model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
 
         dual_model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights)
 

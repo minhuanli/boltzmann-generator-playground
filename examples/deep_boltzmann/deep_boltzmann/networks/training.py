@@ -4,7 +4,7 @@ import numpy as np
 
 import tensorflow as tf
 
-import keras
+#import keras
 
 from deep_boltzmann.networks.invertible_coordinate_transforms import MixedCoordinatesTransformation 
 
@@ -26,11 +26,11 @@ class MLTrainer(object):
 
             if clipnorm is None:
 
-                optimizer = keras.optimizers.adam(lr=lr)
+                optimizer = tf.keras.optimizers.Adam(lr=lr)
 
             else:
 
-                optimizer = keras.optimizers.adam(lr=lr, clipnorm=clipnorm)
+                optimizer = tf.keras.optimizers.Adam(lr=lr, clipnorm=clipnorm)
 
 
 
@@ -282,13 +282,13 @@ class FlexibleTrainer(object):
 
         if optimizer is None:
 
-            optimizer = keras.optimizers.adam(lr=lr)
+            optimizer = tf.keras.optimizers.Adam(lr=lr)
 
 
 
         # assemble model
 
-        self.dual_model = keras.models.Model(inputs=inputs, outputs=outputs)
+        self.dual_model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
 
         self.dual_model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights)
 
@@ -606,11 +606,11 @@ class ResidualTrainer(object):
 
 
 
-        self.input_x0 = keras.layers.Input((bg.dim,))
+        self.input_x0 = tf.keras.layers.Input((bg.dim,))
 
         inputs = [self.input_x0, bg.input_z]
 
-        self.output_xtot = keras.layers.Add()([self.input_x0, bg.output_x])
+        self.output_xtot = tf.keras.layers.Add()([self.input_x0, bg.output_x])
 
         outputs = [self.output_xtot]
 
@@ -636,13 +636,13 @@ class ResidualTrainer(object):
 
         if optimizer is None:
 
-            optimizer = keras.optimizers.adam(lr=lr)
+            optimizer = tf.keras.optimizers.Adam(lr=lr)
 
 
 
         # assemble model
 
-        self.dual_model = keras.models.Model(inputs=inputs, outputs=outputs)
+        self.dual_model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
 
         self.dual_model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights)
 
@@ -842,13 +842,13 @@ class ParticleFilter_(object):
 
         if optimizer is None:
 
-            optimizer = keras.optimizers.adam(lr=lr)
+            optimizer = tf.keras.optimizers.Adam(lr=lr)
 
 
 
         # assemble model
 
-        self.dual_model = keras.models.Model(inputs=inputs, outputs=outputs)
+        self.dual_model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
 
         self.dual_model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights)
 

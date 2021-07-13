@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-import keras
+#import keras
 #from tensorflow.python.ops.parallel_for.gradients import batch_jacobian
 from deep_boltzmann.networks import IndexLayer
 
@@ -75,29 +75,29 @@ class FixedWhiten(object):
         D = {}
         D['dim'] = self.dim
         D['keepdims'] = self.keepdims
-        D['X0mean'] = keras.backend.eval(self.X0mean)
-        D['Twhiten'] = keras.backend.eval(self.Twhiten)
-        D['Tblacken'] = keras.backend.eval(self.Tblacken)
+        D['X0mean'] = tf.keras.backend.eval(self.X0mean)
+        D['Twhiten'] = tf.keras.backend.eval(self.Twhiten)
+        D['Tblacken'] = tf.keras.backend.eval(self.Tblacken)
         D['std'] = self.std
         return D
 
     def connect_xz(self, x):
         # Whiten
-        self.output_z = keras.layers.Lambda(lambda x: tf.matmul(x - self.X0mean, self.Twhiten))(x)
+        self.output_z = tf.keras.layers.Lambda(lambda x: tf.matmul(x - self.X0mean, self.Twhiten))(x)
         if self.keepdims < self.dim:
             junk_dims = self.dim - self.keepdims
-            self.output_z = keras.layers.Lambda(lambda z: tf.concat([z, tf.random_normal([tf.shape(z)[0], junk_dims], stddev=1.0)], 1))(self.output_z)
+            self.output_z = tf.keras.layers.Lambda(lambda z: tf.concat([z, tf.random_normal([tf.shape(z)[0], junk_dims], stddev=1.0)], 1))(self.output_z)
         # Jacobian
-        self.log_det_xz = keras.layers.Lambda(lambda x: self.jacobian_xz * keras.backend.ones((tf.shape(x)[0], 1)))(x)
+        self.log_det_xz = tf.keras.layers.Lambda(lambda x: self.jacobian_xz * tf.keras.backend.ones((tf.shape(x)[0], 1)))(x)
         return self.output_z
 
     def connect_zx(self, z):
         # if we have reduced the dimension, we ignore the last dimensions from the z-direction.
         if self.keepdims < self.dim:
             z = IndexLayer(np.arange(0, self.keepdims))(z)
-        self.output_x = keras.layers.Lambda(lambda z: tf.matmul(z, self.Tblacken) + self.X0mean)(z)
+        self.output_x = tf.keras.layers.Lambda(lambda z: tf.matmul(z, self.Tblacken) + self.X0mean)(z)
         # Jacobian
-        self.log_det_zx = keras.layers.Lambda(lambda z: -self.jacobian_xz * keras.backend.ones((tf.shape(z)[0], 1)))(z)
+        self.log_det_zx = tf.keras.layers.Lambda(lambda z: -self.jacobian_xz * tf.keras.backend.ones((tf.shape(z)[0], 1)))(z)
         return self.output_x
 
     @property
@@ -698,24 +698,24 @@ class InternalCoordinatesTransformation(object):
 
     def connect_xz(self, x):
         self.input_x = x
-        self.output_z_only = keras.layers.Lambda(lambda x: self.x2z(x))(x)
+        self.output_z_only = tf.keras.layers.Lambda(lambda x: self.x2z(x))(x)
         junk_dims = 6
-        self.output_z = keras.layers.Lambda(
+        self.output_z = tf.keras.layers.Lambda(
                 lambda z: tf.concat([z, 0. * tf.random.normal([tf.shape(z)[0], junk_dims], stddev=1.)], 1))(self.output_z_only)
 
         # self.log_det_xz = keras.layers.Lambda(lambda x: log_det_jacobian(self.x2z(x), x))(self.input_x)
-        self.log_det_xz = keras.layers.Lambda(lambda x: self.x2z_jacobian(x))(self.input_x)
+        self.log_det_xz = tf.keras.layers.Lambda(lambda x: self.x2z_jacobian(x))(self.input_x)
 
         return self.output_z
 
     def connect_zx(self, z):
         self.input_z = z
         z = IndexLayer(np.arange(0, self.dim-6))(z)
-        self.output_x = keras.layers.Lambda(lambda z: self.z2x(z)[0])(z)
-        self.angle_loss = keras.layers.Lambda(lambda z: self.z2x(z)[1])(z)
+        self.output_x = tf.keras.layers.Lambda(lambda z: self.z2x(z)[0])(z)
+        self.angle_loss = tf.keras.layers.Lambda(lambda z: self.z2x(z)[1])(z)
 
         # self.log_det_zx = keras.layers.Lambda(lambda z: log_det_jacobian(self.z2x(z), z))(z)
-        self.log_det_zx = keras.layers.Lambda(lambda z: self.z2x_jacobian(z))(z)
+        self.log_det_zx = tf.keras.layers.Lambda(lambda z: self.z2x_jacobian(z))(z)
 
         return self.output_x
 
@@ -808,9 +808,9 @@ class MixedCoordinatesTransformation(InternalCoordinatesTransformation):
         D['ic_stds'] = self.ic_stds
         D['torsion_cut'] = self.torsion_cut
         D['cart_atom_indices'] = self.cart_atom_indices
-        D['cart_X0mean'] = keras.backend.eval(self.cart_X0mean)
-        D['cart_Twhiten'] = keras.backend.eval(self.cart_Twhiten)
-        D['cart_Tblacken'] = keras.backend.eval(self.cart_Tblacken)
+        D['cart_X0mean'] = tf.keras.backend.eval(self.cart_X0mean)
+        D['cart_Twhiten'] = tf.keras.backend.eval(self.cart_Twhiten)
+        D['cart_Tblacken'] = tf.keras.backend.eval(self.cart_Tblacken)
         D['pca_log_det_xz'] = self.pca_log_det_xz
         D['Z_indices'] = self.Z_indices
         return D

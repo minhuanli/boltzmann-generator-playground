@@ -3,7 +3,8 @@ __author__ = 'noe'
 from deep_boltzmann.util import ensure_traj
 from scipy.special import logsumexp
 import numpy as np
-import keras
+import tensorflow as tf
+#import keras
 
 
 def plot_latent_sampling(rc, Z, E, rclabel='Reaction coord.', maxener=100):
@@ -168,7 +169,7 @@ class GaussianPriorMCMC(object):
                 isP[I_permuted] = self.xmapper.is_permuted(sample_x[I_permuted])
                 I_permuted = np.where(isP == True)[0]
         if self.tf:
-            sample_e = keras.backend.eval(self.model.energy_tf(sample_x)) / self.temperature
+            sample_e = tf.keras.backend.eval(self.model.energy_tf(sample_x)) / self.temperature
         else:
             sample_e = self.model.energy(sample_x) / self.temperature
         return sample_s, sample_z, sample_x, sample_e, sample_J

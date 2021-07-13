@@ -1,4 +1,4 @@
-import keras
+#import keras
 import tensorflow as tf
 import numpy as np
 import numbers
@@ -36,14 +36,14 @@ def nonlinear_transform(output_size, nlayers=3, nhidden=100, activation='relu', 
         nhidden = np.array(nhidden)
         if nhidden.size != nlayers-1:
             raise ValueError('Illegal size of nhidden. Expecting 1d array with nlayers-1 elements')
-    M = [keras.layers.Dense(nh, activation=activation, **args) for nh in nhidden]
+    M = [tf.keras.layers.Dense(nh, activation=activation, **args) for nh in nhidden]
     if init_outputs is None:
-        final_layer = keras.layers.Dense(output_size, activation='linear', **args)
+        final_layer = tf.keras.layers.Dense(output_size, activation='linear', **args)
     else:
         argscopy = copy.deepcopy(args)
-        argscopy['kernel_initializer'] = keras.initializers.Zeros()
-        argscopy['bias_initializer'] = keras.initializers.Constant(init_outputs)
-        final_layer = keras.layers.Dense(output_size, activation='linear', **argscopy)
+        argscopy['kernel_initializer'] = tf.keras.initializers.Zeros()
+        argscopy['bias_initializer'] = tf.keras.initializers.Constant(init_outputs)
+        final_layer = tf.keras.layers.Dense(output_size, activation='linear', **argscopy)
                                          #kernel_initializer=keras.initializers.Zeros(),
                                          #bias_initializer=keras.initializers.Constant(init_outputs))
     M += [final_layer]
@@ -51,7 +51,7 @@ def nonlinear_transform(output_size, nlayers=3, nhidden=100, activation='relu', 
     return M
 
 
-class ResampleLayer(keras.layers.Layer):
+class ResampleLayer(tf.keras.layers.Layer):
     """
     Receives as inputs latent space encodings z and normal noise w. Transforms w to
     Match the mean and the standard deviations of z.
@@ -67,10 +67,10 @@ class ResampleLayer(keras.layers.Layer):
         w = x[:, self.dim:]
         #z, w = x
         # mean
-        mean = keras.backend.mean(z, axis=0)
+        mean = tf.keras.backend.mean(z, axis=0)
         # covariance matrix
-        batchsize = keras.backend.shape(z)[0]
-        cov = keras.backend.dot(keras.backend.transpose(z), z) / keras.backend.cast(batchsize, np.float32)
+        batchsize = tf.keras.backend.shape(z)[0]
+        cov = tf.keras.backend.dot(tf.keras.backend.transpose(z), z) / tf.keras.backend.cast(batchsize, np.float32)
         # standard deviations
         std = tf.sqrt(tf.diag_part(cov))
         # transform w and return
@@ -81,7 +81,7 @@ class ResampleLayer(keras.layers.Layer):
         return input_shape[0], self.dim
 
 
-class IndexLayer(keras.layers.Layer):
+class IndexLayer(tf.keras.layers.Layer):
     def __init__(self, indices, **kwargs):
         """ Returns [:, indices].
         """

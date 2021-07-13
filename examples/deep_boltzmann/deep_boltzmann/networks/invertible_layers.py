@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-import keras
+#import keras
 from deep_boltzmann.networks import IndexLayer, connect
 
 def split_merge_indices(ndim, nchannels=2, channels=None):
@@ -80,7 +80,7 @@ class SplitChannels(object):
 
     def connect_zx(self, z):
         # first concatenate
-        x_scrambled = keras.layers.Concatenate()(z)
+        x_scrambled = tf.keras.layers.Concatenate()(z)
         # unscramble x
         self.output_x = IndexLayer(self.indices_merge)(x_scrambled) # , name='output_x'
         return self.output_x
@@ -89,7 +89,7 @@ class SplitChannels(object):
 class MergeChannels(SplitChannels):
     def connect_xz(self, x):
         # first concatenate
-        z_scrambled = keras.layers.Concatenate()(x)
+        z_scrambled = tf.keras.layers.Concatenate()(x)
         # unscramble x
         self.output_z = IndexLayer(self.indices_merge)(z_scrambled) # , name='output_z'
         return self.output_z
@@ -119,7 +119,7 @@ class Scaling(object):
 
         """
         # define local classes
-        class ScalingLayer(keras.engine.Layer):
+        class ScalingLayer(tf.keras.layers.Layer):
             def __init__(self, log_scaling_factors, **kwargs):
                 """ Layer that scales dimensions with trainable factors
 
@@ -161,12 +161,12 @@ class Scaling(object):
 
         # initialize scaling factors
         if scaling_factors is None:
-            self.log_scaling_factors = keras.backend.variable(np.zeros((1, ndim)),
-                                                              dtype=keras.backend.floatx(),
+            self.log_scaling_factors = tf.keras.backend.variable(np.zeros((1, ndim)),
+                                                              dtype=tf.keras.backend.floatx(),
                                                               name='log_scale')
         else:
-            self.log_scaling_factors = keras.backend.variable(np.log(scaling_factors),
-                                                              dtype=keras.backend.floatx(),
+            self.log_scaling_factors = tf.keras.backend.variable(np.log(scaling_factors),
+                                                              dtype=tf.keras.backend.floatx(),
                                                               name='log_scale')
 
         self.trainable = trainable
@@ -188,7 +188,7 @@ class Scaling(object):
 
     def to_dict(self):
         D = {}
-        D['scaling_factors'] = keras.backend.eval(self.scaling_factors)
+        D['scaling_factors'] = tf.keras.backend.eval(self.scaling_factors)
         D['trainable'] = self.trainable
         D['name_xz'] = self.Sxz.name
         D['name_zx'] = self.Szx.name
@@ -197,16 +197,16 @@ class Scaling(object):
     def connect_xz(self, x):
         def lambda_Jxz(x):
             J = tf.reduce_sum(self.log_scaling_factors, axis=1)[0]
-            return J * keras.backend.ones((tf.shape(x)[0], 1))
-        self.log_det_xz = keras.layers.Lambda(lambda_Jxz)(x)
+            return J * tf.keras.backend.ones((tf.shape(x)[0], 1))
+        self.log_det_xz = tf.keras.layers.Lambda(lambda_Jxz)(x)
         z = self.Sxz(x)
         return z
 
     def connect_zx(self, z):
         def lambda_Jzx(x):
             J = tf.reduce_sum(-self.log_scaling_factors, axis=1)[0]
-            return J * keras.backend.ones((tf.shape(x)[0], 1))
-        self.log_det_zx = keras.layers.Lambda(lambda_Jzx)(z)
+            return J * tf.keras.backend.ones((tf.shape(x)[0], 1))
+        self.log_det_zx = tf.keras.layers.Lambda(lambda_Jzx)(z)
         x = self.Szx(z)
         return x
 
@@ -261,10 +261,10 @@ class NICER(CompositeLayer):
 
         # first stage backward
         y2 = x2
-        y1 = keras.layers.Subtract()([x1, connect(x2, self.M2)])
+        y1 = tf.keras.layers.Subtract()([x1, connect(x2, self.M2)])
         # second stage backward
         z1 = y1
-        z2 = keras.layers.Subtract()([y2, connect(y1, self.M1)])
+        z2 = tf.keras.layers.Subtract()([y2, connect(y1, self.M1)])
 
         return [z1, z2] + x[2:]  # append other layers if there are any
 
@@ -276,10 +276,10 @@ class NICER(CompositeLayer):
 
         # first stage forward
         y1 = z1
-        y2 = keras.layers.Add()([z2, connect(z1, self.M1)])
+        y2 = tf.keras.layers.Add()([z2, connect(z1, self.M1)])
         # second stage forward
         x2 = y2
-        x1 = keras.layers.Add()([y1, connect(y2, self.M2)])
+        x1 = tf.keras.layers.Add()([y1, connect(y2, self.M2)])
 
         return [x1, x2] + z[2:]  # append other layers if there are any
 
@@ -302,9 +302,9 @@ class RealNVP(CompositeLayer):
 
     def connect_xz(self, x):
         def lambda_exp(x):
-            return keras.backend.exp(x)
+            return tf.keras.backend.exp(x)
         def lambda_sum(x):
-            return keras.backend.sum(x[0], axis=1, keepdims=True) + keras.backend.sum(x[1], axis=1, keepdims=True)
+            return tf.keras.backend.sum(x[0], axis=1, keepdims=True) + tf.keras.backend.sum(x[1], axis=1, keepdims=True)
 
         x1 = x[0]
         x2 = x[1]
@@ -314,25 +314,25 @@ class RealNVP(CompositeLayer):
         y1 = x1
         self.Sxy_layer = connect(x1, self.S1)
         self.Txy_layer = connect(x1, self.T1)
-        prodx = keras.layers.Multiply()([x2, keras.layers.Lambda(lambda_exp)(self.Sxy_layer)])
-        y2 = keras.layers.Add()([prodx, self.Txy_layer])
+        prodx = tf.keras.layers.Multiply()([x2, tf.keras.layers.Lambda(lambda_exp)(self.Sxy_layer)])
+        y2 = tf.keras.layers.Add()([prodx, self.Txy_layer])
 
         self.output_z2 = y2
         self.Syz_layer = connect(y2, self.S2)
         self.Tyz_layer = connect(y2, self.T2)
-        prody = keras.layers.Multiply()([y1, keras.layers.Lambda(lambda_exp)(self.Syz_layer)])
-        self.output_z1 = keras.layers.Add()([prody, self.Tyz_layer])
+        prody = tf.keras.layers.Multiply()([y1, tf.keras.layers.Lambda(lambda_exp)(self.Syz_layer)])
+        self.output_z1 = tf.keras.layers.Add()([prody, self.Tyz_layer])
 
         # log det(dz/dx)
-        self.log_det_xz = keras.layers.Lambda(lambda_sum)([self.Sxy_layer, self.Syz_layer])
+        self.log_det_xz = tf.keras.layers.Lambda(lambda_sum)([self.Sxy_layer, self.Syz_layer])
 
         return [self.output_z1, self.output_z2] + x[2:]  # append other layers if there are any
 
     def connect_zx(self, z):
         def lambda_negexp(x):
-            return keras.backend.exp(-x)
+            return tf.keras.backend.exp(-x)
         def lambda_negsum(x):
-            return keras.backend.sum(-x[0], axis=1, keepdims=True) + keras.backend.sum(-x[1], axis=1, keepdims=True)
+            return tf.keras.backend.sum(-x[0], axis=1, keepdims=True) + tf.keras.backend.sum(-x[1], axis=1, keepdims=True)
 
         z1 = z[0]
         z2 = z[1]
@@ -342,18 +342,18 @@ class RealNVP(CompositeLayer):
         y2 = z2
         self.Szy_layer = connect(z2, self.S2)
         self.Tzy_layer = connect(z2, self.T2)
-        z1_m_Tz2 = keras.layers.Subtract()([z1, self.Tzy_layer])
-        y1 = keras.layers.Multiply()([z1_m_Tz2, keras.layers.Lambda(lambda_negexp)(self.Szy_layer)])
+        z1_m_Tz2 = tf.keras.layers.Subtract()([z1, self.Tzy_layer])
+        y1 = tf.keras.layers.Multiply()([z1_m_Tz2, tf.keras.layers.Lambda(lambda_negexp)(self.Szy_layer)])
 
         self.output_x1 = y1
         self.Syx_layer = connect(y1, self.S1)
         self.Tyx_layer = connect(y1, self.T1)
-        y2_m_Ty1 = keras.layers.Subtract()([y2, self.Tyx_layer])
-        self.output_x2 = keras.layers.Multiply()([y2_m_Ty1, keras.layers.Lambda(lambda_negexp)(self.Syx_layer)])
+        y2_m_Ty1 = tf.keras.layers.Subtract()([y2, self.Tyx_layer])
+        self.output_x2 = tf.keras.layers.Multiply()([y2_m_Ty1, tf.keras.layers.Lambda(lambda_negexp)(self.Syx_layer)])
 
         # log det(dx/dz)
         # TODO: check Jacobian
-        self.log_det_zx = keras.layers.Lambda(lambda_negsum)([self.Szy_layer, self.Syx_layer])
+        self.log_det_zx = tf.keras.layers.Lambda(lambda_negsum)([self.Szy_layer, self.Syx_layer])
 
         return [self.output_x1, self.output_x2] + z[2:]  # append other layers if there are any
 
