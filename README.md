@@ -2,11 +2,11 @@
 
 This is a playground of [Boltzmann Generator](https://science.sciencemag.org/content/365/6457/eaaw1147) codes. Here is the plan:
 
-[x] Explore the BG sampling model with PDZ3 datasets (See pdz3/PG_pdz3_TF2.ipynb)
+- [x] Explore the BG sampling model with PDZ3 datasets (See pdz3/PG_pdz3_TF2.ipynb)
 
-[x] Provide a more general workflow and preprocess scripts for using this framework in other proteins. (See pdz3/PG_pdz3_TF2.ipynb)
+- [x] Provide a more general workflow and preprocess scripts for using this framework in other proteins. (See pdz3/PG_pdz3_TF2.ipynb)
 
-[x] Upgrade to Tensorflow 2 
+- [x] Upgrade to Tensorflow 2 
 
 Original Codes and notebooks in `example/` folder are knidly provided by the authors of Boltzmann Generator paper via [Zenodo](https://zenodo.org/record/3242635#.YIgr931KhTY) an emails.
 
