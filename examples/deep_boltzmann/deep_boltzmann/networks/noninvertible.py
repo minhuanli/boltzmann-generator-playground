@@ -1,4 +1,4 @@
-import keras
+#import keras
 import tensorflow as tf
 import numpy as np
 
@@ -23,10 +23,10 @@ class NormalTransformer(object):
         log_sigma = _connect(x0, self.sigma_layers)
         # transform x
         #x1 = mu + sigma * w0
-        self.x1 = keras.layers.Lambda(lambda args: self._compute_x1(args[0], args[1], args[2]))([mu, log_sigma, w1])
+        self.x1 = tf.keras.layers.Lambda(lambda args: self._compute_x1(args[0], args[1], args[2]))([mu, log_sigma, w1])
         # compute density
         #log_p1 = -tf.reduce_sum(sigma, axis=0) - 0.5 * tf.reduce_sum((self.x1 - mu)/sigma, axis=0)
-        self.log_p1 = keras.layers.Lambda(lambda args: self._compute_log_p1(args[0], args[1], args[2]))([mu, log_sigma, self.x1])
+        self.log_p1 = tf.keras.layers.Lambda(lambda args: self._compute_log_p1(args[0], args[1], args[2]))([mu, log_sigma, self.x1])
         # return variable and density
         return self.x1, self.log_p1
 
@@ -48,10 +48,10 @@ class NormalResidualTransformer(object):
         log_sigma = _connect(x0, self.sigma_layers)
         # transform x
         #x1 = mu + sigma * w0
-        self.x1 = keras.layers.Lambda(lambda args: self._compute_x1(args[0], args[1], args[2], args[3]))([x0, mu, log_sigma, w1])
+        self.x1 = tf.keras.layers.Lambda(lambda args: self._compute_x1(args[0], args[1], args[2], args[3]))([x0, mu, log_sigma, w1])
         # compute density
         #log_p1 = -tf.reduce_sum(sigma, axis=0) - 0.5 * tf.reduce_sum((self.x1 - mu)/sigma, axis=0)
-        self.log_p1 = keras.layers.Lambda(lambda args: self._compute_log_p1(args[0], args[1], args[2], args[3]))([x0, mu, log_sigma, self.x1])
+        self.log_p1 = tf.keras.layers.Lambda(lambda args: self._compute_log_p1(args[0], args[1], args[2], args[3]))([x0, mu, log_sigma, self.x1])
         # return variable and density
         return self.x1, self.log_p1
 
@@ -63,7 +63,7 @@ class NoninvNet(object):
 
     def connect(self):
         # x0 = 0
-        self.x0 = keras.layers.Input(shape=(self.dim,))  # current noise input
+        self.x0 = tf.keras.layers.Input(shape=(self.dim,))  # current noise input
         x_last = self.x0
 
         self.xs = []
@@ -71,7 +71,7 @@ class NoninvNet(object):
         self.log_ps = []
         for layer in self.layers:
             # noise input
-            w = keras.layers.Input(shape=(self.dim,))  # current noise input
+            w = tf.keras.layers.Input(shape=(self.dim,))  # current noise input
             self.ws.append(w)
             # compute x and probability
             x, log_p = layer.connect(x_last, w)
@@ -82,7 +82,7 @@ class NoninvNet(object):
         # output
         self.x_out = self.xs[-1]
         # total probability
-        self.log_p_total = keras.layers.Lambda(lambda arg: tf.reduce_sum(arg, axis=0))(self.log_ps)
+        self.log_p_total = tf.keras.layers.Lambda(lambda arg: tf.reduce_sum(arg, axis=0))(self.log_ps)
 
 
     def log_probability(self):

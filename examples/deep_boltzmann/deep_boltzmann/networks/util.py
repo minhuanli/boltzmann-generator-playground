@@ -1,6 +1,7 @@
 __author__ = 'noe'
 
-import keras
+#import keras
+import tensorflow as tf
 import numpy as np
 
 def connect(input_layer, layers):
@@ -26,17 +27,17 @@ def connect(input_layer, layers):
 
 def plot_network(network):
     from IPython.display import SVG
-    from keras.utils.vis_utils import model_to_dot
+    from tf.keras.utils import model_to_dot
     SVG(model_to_dot(network).create(prog='dot', format='svg'))
 
 def layer_to_dict(layer):
-    d = {'config' : keras.layers.serialize(layer),
+    d = {'config' : tf.keras.layers.serialize(layer),
          'input_shape' : layer.input_shape,
          'weights' : layer.get_weights()}
     return d
 
 def layer_from_dict(d):
-    layer = keras.layers.deserialize(d['config'])
+    layer = tf.keras.layers.deserialize(d['config'])
     layer.build(d['input_shape'])
     layer.set_weights(d['weights'])
     return layer
@@ -50,7 +51,7 @@ def serialize_layers(list_of_layers):
         list of list of lists or kears layer
 
     """
-    if isinstance(list_of_layers, keras.layers.Layer):
+    if isinstance(list_of_layers, tf.keras.layers.Layer):
         return layer_to_dict(list_of_layers)
     return [serialize_layers(l) for l in list_of_layers]
 
@@ -120,10 +121,10 @@ def average_gradient_norm(model, data):
         # labels
         model.targets[0],
         # train or test mode
-        keras.backend.learning_phase()
+        tf.keras.backend.learning_phase()
     ]
 
-    grad_fct = keras.backend.function(inputs=input_tensors, outputs=get_gradients)
+    grad_fct = tf.keras.backend.function(inputs=input_tensors, outputs=get_gradients)
 
     steps = 0
     total_norm = 0

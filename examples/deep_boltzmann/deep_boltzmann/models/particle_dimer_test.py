@@ -1,8 +1,9 @@
 __author__ = 'noe'
 
 import unittest
-import keras
+#import keras
 import numpy as np
+import tensorflow as tf
 from deep_boltzmann.models import ParticleDimer
 
 class ParticleDimerTest(unittest.TestCase):
@@ -15,22 +16,22 @@ class ParticleDimerTest(unittest.TestCase):
 
     def test_LJ_energy(self):
         E = self.model.LJ_energy(self.x0)
-        E_tf = keras.backend.eval(self.model.LJ_energy_tf(self.x0))
+        E_tf = tf.keras.backend.eval(self.model.LJ_energy_tf(self.x0))
         assert(E - E_tf < self.accuracy)
 
     def test_dimer_energy(self):
         E = self.model.dimer_energy(self.x0)
-        E_tf = keras.backend.eval(self.model.dimer_energy_tf(self.x0))
+        E_tf = tf.keras.backend.eval(self.model.dimer_energy_tf(self.x0))
         assert(E - E_tf < self.accuracy)
 
     def test_box_energy(self):
         E = self.model.box_energy(self.x0)
-        E_tf = keras.backend.eval(self.model.box_energy_tf(self.x0))
+        E_tf = tf.keras.backend.eval(self.model.box_energy_tf(self.x0))
         assert(E - E_tf < self.accuracy)
 
     def test_energy(self):
         E = self.model.energy(self.x0)
-        E_tf = keras.backend.eval(self.model.energy_tf(self.x0))
+        E_tf = tf.keras.backend.eval(self.model.energy_tf(self.x0))
         assert(E - E_tf < self.accuracy)
 
 

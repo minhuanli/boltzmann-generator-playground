@@ -153,7 +153,7 @@ def wrap_energy_as_tf_op(compute_energy, n_steps=0):
         # here we can call our python function using the `tf.py_func` wrapper
         # important to note: this has to be executed on the master node (only important for distributed computing)
 
-        potential_energy, gradients = tf.py_func(func=compute_energy, inp=[configuration], Tout=[dtype, dtype])
+        potential_energy, gradients = tf.numpy_function(func=compute_energy, inp=[configuration], Tout=[dtype, dtype])
         potential_energy.set_shape((n_batch, 1))
         gradients.set_shape((n_batch, n_system_dim))
 

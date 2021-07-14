@@ -62,6 +62,18 @@ basis_Zs['HIS'] = [
     ["H", "N", "CA", "C"],
     ["O", "C", "CA", "N"],
     ["HA", "CA", "N", "C"],
+    ["CB", "CA", "N", "C"],
+    ["CG", "CB", "CA", "N"],
+    ["ND1", "CG", "CB", "CA"],
+    ["HD1", "CD2", "CG", "CB"],
+    ["CD2", "CG", "CB", "CA"],
+    ["CE1", "ND1", "CG", "CB"],
+    ["NE2", "CD2", "CG", "CB"],
+    ["HB2", "CB", "CA", "C"],
+    ["HB3", "CB", "CA", "C"],
+    ["HD2", "CE1", "ND1", "CG"],
+    ["HE1", "NE2", "CD2", "CG"],
+    ["HE2", "CD2", "CG", "CB"]
     ]
 
 basis_Zs['ASP'] = [
@@ -312,9 +324,11 @@ def mdtraj2Z(mdtraj_topology, cartesian=None):
         resatoms = {a.name:a.index for a in _.atoms}
         resname = _.name
         for entry in basis_Zs[resname]: # template entry:
-            if resatoms[entry[0]] not in notIC:
-                Z.append([resatoms[_e] for _e in entry])
-
+            try:
+                if resatoms[entry[0]] not in notIC:
+                    Z.append([resatoms[_e] for _e in entry])
+            except:
+                continue
         if nterm:
             # set two additional N-term protons
             if resatoms["H2"] not in notIC:
