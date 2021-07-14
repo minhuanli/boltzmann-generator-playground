@@ -288,7 +288,8 @@ class InvNet(object):
         #else:
         #    z, J = self.TxzJ.predict(x)
         #    return z, J[:, 0]
-        return self.Txz.predict(x)
+        z, J = self.Txz.predict(x)
+        return z, J[:,0]
 
     def transform_zx(self, z):
         return self.Tzx.predict(ensure_traj(z))[0]
@@ -300,7 +301,8 @@ class InvNet(object):
         # else:
         #     x, J = self.TzxJ.predict(z)
         #     return x, J[:, 0]
-        return self.Tzx.predict(z)
+        x, J = self.Tzx.predict(z)
+        return x, J[:,0]
 
     def std_z(self, x):
         """ Computes average standard deviation from the origin in z for given x """

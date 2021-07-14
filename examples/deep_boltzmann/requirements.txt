@@ -1,8 +1,6 @@
-python==3.7.0
-numpy==1.19.0
-scipy==1.6.3
-matplotlib==3.4.1
-keras==2.3.1
-tensorflow==1.15
-openmm==7.5.0
-mdtraj==1.9.5
+python>=3.7.0
+numpy>=1.19.0
+scipy>=1.6.0
+tensorflow>=2.5.0
+openmm>=7.5.0
+mdtraj>=1.9.5
