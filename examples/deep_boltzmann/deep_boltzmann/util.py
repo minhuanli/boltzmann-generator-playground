@@ -31,9 +31,9 @@ def _linlogcut_tf(x, a=0, b=1000):
     # cutoff x after b - this should also cutoff infinities
     x = tf.where(x < b, x, b * tf.ones(tf.shape(x)))
     # log after a
-    y = a + tf.where(x < a, x - a, tf.log(x - a + 1))
+    y = a + tf.where(x < a, x - a, tf.math.log(x - a + 1))
     # make sure everything is finite
-    y = tf.where(tf.is_finite(y), y, b * tf.ones(tf.shape(y)))
+    y = tf.where(tf.math.is_finite(y), y, b * tf.ones(tf.shape(y)))
     return y
 
 def _linlogcut_tf_constantclip(x, a=0, b=1000):
@@ -42,9 +42,9 @@ def _linlogcut_tf_constantclip(x, a=0, b=1000):
     # cutoff x after b - this should also cutoff infinities
     #x = tf.where(x < b, x, b * tf.ones(tf.shape(x)))
     # log after a
-    y = a + tf.where(x < a, x - a, tf.log(x - a + 1))
+    y = a + tf.where(x < a, x - a, tf.math.log(x - a + 1))
     # make sure everything is finite
-    y = tf.where(tf.is_finite(y), y, b * tf.ones(tf.shape(y)))
+    y = tf.where(tf.math.is_finite(y), y, b * tf.ones(tf.shape(y)))
     return y
 
 def _linlogcut_np(x, a=0, b=1000):
@@ -57,7 +57,7 @@ def logreg(x, a=0.001, tf=False):
         return _logreg_np(x, a=a)
 
 def _logreg_tf(x, a=0.001):
-    logx = tf.where(x > a, tf.log(x), tf.log(a) - (a-x))
+    logx = tf.where(x > a, tf.math.log(x), tf.math.log(a) - (a-x))
     return logx
 def _logreg_np(x, a=0.001):
     raise NotImplementedError('Numpy version not yet implemented.')

@@ -1,13 +1,10 @@
 import sys
 import numbers
-
 import numpy as np
-
 import tensorflow as tf
-
 #import keras
-
 from deep_boltzmann.networks.invertible_coordinate_transforms import MixedCoordinatesTransformation
+from deep_boltzmann.util import linlogcut
 
 
 def MLtrain_step_normal(bg, x_batch, optimizer, std=1.0, training=True):
@@ -148,66 +145,83 @@ class FlexibleTrainer(object):
         self.rc_func = rc_func
 
         inputs = [bg.input_x, bg.input_z]
-        outputs = [bg.output_z, bg.output_x]
-        if weigh_ML:
-            losses = [self.loss_ML_weighted, self.loss_KL]
-        else:
-            losses = [self.loss_ML, self.loss_KL]
-        loss_weights = [w_ML, w_KL]
 
-        # TODO: MHL, Clear RC-Related training Term in TF2.0
-        if w_RC > 0.0:
-            if rc_dims == 1:
-                self.gmeans = np.linspace(rc_min, rc_max, 11)
-                self.gstd = (rc_max - rc_min) / 11.0
-                losses.append(self.loss_RC)
-            else:
-                # make nD grid
-                self.gmeans = np.array([_.ravel() for _ in np.meshgrid(
-                    *[np.linspace(rc_min[__], rc_max[__], 11) for __ in range(rc_dims)])]).astype(np.float32)
-                # check if experimental data is supplied, if so use them to determine kde centers
-                if training_data is not None:
-                    raise NotImplementedError()
-                self.gstd = ((rc_max - rc_min) /
-                             11.0).reshape((1, -1)).astype(np.float32)
-                losses.append(self.loss_RCnd)
-
-            outputs.append(bg.output_x)
-            loss_weights.append(w_RC)
+        self.w_ML = w_ML
+        self.w_KL = w_KL
+        self.w_RC = w_RC
+        self.w_L2_angle = w_L2_angle
 
         if w_L2_angle > 0.0:
-            outputs.append(bg.output_x)
-            losses.append(self.loss_L2_angle_penalization)
-            loss_weights.append(w_L2_angle)
+            outputs = [bg.output_z, bg.output_x, bg.log_det_Jxz,
+                       bg.log_det_Jzx, self.loss_L2_angle_penalization]
+        else:
+            outputs = [bg.output_z, bg.output_x,
+                       bg.log_det_Jxz, bg.log_det_Jzx]
+
+        self.loss_name = ["Overall Loss"]
+        if self.w_ML > 0.0:
+            self.loss_name.append("ML Loss")
+        if self.w_KL > 0.0:
+            self.loss_name.append("KL Loss")
+        if self.w_L2_angle > 0.0:
+            self.loss_name.append("L2 Angle Loss")
+
+        # if weigh_ML:
+        #     losses = [self.loss_ML_weighted, self.loss_KL]
+        # else:
+        #     losses = [self.loss_ML, self.loss_KL]
+        # loss_weights = [w_ML, w_KL]
+
+        # # TODO: MHL, Clear RC-Related training Term in TF2.0
+        # if w_RC > 0.0:
+        #     if rc_dims == 1:
+        #         self.gmeans = np.linspace(rc_min, rc_max, 11)
+        #         self.gstd = (rc_max - rc_min) / 11.0
+        #         losses.append(self.loss_RC)
+        #     else:
+        #         # make nD grid
+        #         self.gmeans = np.array([_.ravel() for _ in np.meshgrid(
+        #             *[np.linspace(rc_min[__], rc_max[__], 11) for __ in range(rc_dims)])]).astype(np.float32)
+        #         # check if experimental data is supplied, if so use them to determine kde centers
+        #         if training_data is not None:
+        #             raise NotImplementedError()
+        #         self.gstd = ((rc_max - rc_min) /
+        #                      11.0).reshape((1, -1)).astype(np.float32)
+        #         losses.append(self.loss_RCnd)
+
+        #     # outputs.append(bg.output_x)
+        #     loss_weights.append(w_RC)
+
+        # if w_L2_angle > 0.0:
+        #     # outputs.append(bg.output_x)
+        #     losses.append(self.loss_L2_angle_penalization)
+        #     loss_weights.append(w_L2_angle)
 
         # build estimator
         if optimizer is None:
-            optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+            self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
 
         # assemble model
         self.dual_model = tf.keras.models.Model(inputs=inputs, outputs=outputs)
-        self.dual_model.compile(optimizer=optimizer,
-                                loss=losses, loss_weights=loss_weights)
+        # self.dual_model.compile(optimizer=optimizer,
+        #                         loss=losses, loss_weights=loss_weights)
 
         # training loop
-        dummy_output = np.zeros((batch_size, bg.dim))
-        self.y = [dummy_output for o in outputs]
+        # dummy_output = np.zeros((batch_size, bg.dim))
+        # self.y = [dummy_output for o in outputs]
 
         self.loss_train = []
         self.acceptance_rate = []
 
-    def loss_ML(self, y_true, y_pred):
-        z = self.bg.output_z
-        Jxz = self.bg.log_det_Jxz[:, 0]
-        LL = Jxz - (0.5 / (self.std**2)) * tf.reduce_sum(z**2, axis=1)
+    def loss_ML(self, output_z, log_det_Jxz):
+        LL = tf.reshape(log_det_Jxz, -1) - (0.5 / (self.std**2)
+                                            ) * tf.reduce_sum(output_z**2, axis=1)
         return -LL
 
-    def loss_ML_weighted(self, y_true, y_pred):
-        from deep_boltzmann.util import linlogcut
-
-        x = self.bg.input_x
-        z = self.bg.output_z
-        Jxz = self.bg.log_det_Jxz[:, 0]
+    def loss_ML_weighted(self, x_batch, output_z, log_det_Jxz):
+        x = tf.constant(x_batch)
+        z = output_z
+        Jxz = log_det_Jxz[:, 0]
         LL = Jxz - (0.5 / (self.std**2)) * tf.reduce_sum(z**2, axis=1)
 
         # compute energies
@@ -226,8 +240,12 @@ class FlexibleTrainer(object):
 
         return weighted_negLL
 
-    def loss_KL(self, y_true, y_pred):
-        return self.bg.log_KL_x(self.high_energy, self.max_energy, temperature_factors=self.temperature, explore=1.0)
+    def loss_KL(self, output_x, log_det_Jzx):
+        x = output_x
+        # compute energy
+        E = self.bg.energy_model.energy_tf(x) / self.temperature
+        Ereg = linlogcut(E, self.high_energy, self.max_energy, tf=True)
+        return -tf.reshape(log_det_Jzx, -1) + Ereg
 
     def loss_RC(self, y_true, y_pred):
         return -self.bg.rc_entropy_old(self.rc_func, self.gmeans, self.gstd)
@@ -235,7 +253,8 @@ class FlexibleTrainer(object):
     def loss_RCnd(self, y_true, y_pred):
         return -self.bg.rc_entropy(self.rc_func, self.gmeans, self.gstd)
 
-    def loss_L2_angle_penalization(self, y_true, y_pred):
+    @property
+    def loss_L2_angle_penalization(self):
         losses = []
         for layer in self.bg.layers:
             if hasattr(layer, "angle_loss"):
@@ -243,23 +262,66 @@ class FlexibleTrainer(object):
         loss = sum(losses)
         return loss
 
+    def flexible_train_step(self, x_batch, z_batch):
+        with tf.GradientTape() as tape:
+            loss_overall = 0.0
+
+            if self.w_L2_angle > 0.0:
+                output_z, output_x, log_det_Jxz, log_det_Jzx, L2_angle_loss = self.dual_model([
+                                                                                              x_batch, z_batch])
+                loss_overall += L2_angle_loss*self.w_L2_angle
+            else:
+                output_z, output_x, log_det_Jxz, log_det_Jzx = self.dual_model([
+                                                                               x_batch, z_batch])
+
+            if self.w_ML > 0.0:
+                if self.weighML:
+                    ML_loss = self.loss_ML_weighted(
+                        x_batch, output_z, log_det_Jxz)
+                else:
+                    ML_loss = self.loss_ML(output_z, log_det_Jxz)
+                loss_overall += ML_loss*self.w_ML
+
+            if self.w_KL > 0.0:
+                KL_loss = self.loss_KL(output_x, log_det_Jzx)
+                loss_overall += KL_loss*self.w_KL
+
+            # TODO: Fix RC-related term
+            loss_overall = tf.reduce_mean(loss_overall)
+
+        grads = tape.gradient(loss_overall, self.dual_model.trainable_weights)
+        self.optimizer.apply_gradients(
+            zip(grads, self.dual_model.trainable_weights))
+        
+        loss_record = [float(loss_overall)]
+        if self.w_ML > 0.0:
+            loss_record.append(float(tf.reduce_mean(ML_loss)))
+        if self.w_KL > 0.0:
+            loss_record.append(float(tf.reduce_mean(KL_loss)))
+        if self.w_L2_angle > 0.0:
+            loss_record.append(float(tf.reduce_mean(L2_angle_loss)))
+        
+        return loss_record
+        
+
     def train(self, x_train, epochs=2000, verbose=1):
         I = np.arange(x_train.shape[0])
         for e in range(epochs):
             # sample batch
             Isel = np.random.choice(I, size=self.batch_size, replace=True)
             x_batch = x_train[Isel]
-            w_batch = np.sqrt(self.temperature) * \
+            z_batch = np.sqrt(self.temperature) * \
                 np.random.randn(self.batch_size, self.bg.dim)
             # This Step is not valid in TF 2.0
-            l = self.dual_model.train_on_batch(x=[x_batch, w_batch], y=self.y)
+            # l = self.dual_model.train_on_batch(x=[x_batch, w_batch], y=self.y)
+            l = self.flexible_train_step(x_batch, z_batch)
             self.loss_train.append(l)
 
             # print
             if verbose > 0:
                 str_ = 'Epoch ' + str(e) + '/' + str(epochs) + ' '
-                for i in range(len(self.dual_model.metrics_names)):
-                    str_ += self.dual_model.metrics_names[i] + ' '
+                for i,name in enumerate(self.loss_name):
+                    str_ += name + ' '
                     str_ += '{:.4f}'.format(self.loss_train[-1][i]) + ' '
                 print(str_)
                 sys.stdout.flush()

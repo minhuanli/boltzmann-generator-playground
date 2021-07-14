@@ -173,7 +173,7 @@ class InvNet(object):
     def log_likelihood_z_cauchy(self, scale=1.0):
         """ Returns the log likelihood of z|x assuming a Cauchy distribution in z
         """
-        return -tf.reduce_sum(tf.log(1 + (self.output_z / scale)**2), axis=1)
+        return -tf.reduce_sum(tf.math.log(1 + (self.output_z / scale)**2), axis=1)
 
     def rc_entropy(self, rc_func, gmeans, gstd, ntemperatures=1):
         """ Computes the entropy along a 1D reaction coordinate
@@ -211,7 +211,7 @@ class InvNet(object):
         kmatT = tf.transpose(tf.reshape(
             kmat, (batchsize_per_temperature, ntemperatures, nbins)), perm=(1, 0, 2))
         histogram = tf.reduce_mean(kmatT, axis=1)
-        entropies = tf.reduce_sum(histogram * tf.log(histogram), axis=1)
+        entropies = tf.reduce_sum(histogram * tf.math.log(histogram), axis=1)
 
         return -tf.reduce_mean(entropies)
 
@@ -385,7 +385,7 @@ class EnergyInvNet(InvNet):
         x = self.output_x
 
         # compute z energy
-        Ez = self.dim * tf.log(tf.sqrt(temperature_factors)) + \
+        Ez = self.dim * tf.math.log(tf.sqrt(temperature_factors)) + \
             tf.reduce_sum(z**2, axis=1) / (2.0 * temperature_factors)
 
         # compute x energy and regularize
@@ -481,10 +481,10 @@ class EnergyInvNet(InvNet):
         if symmetric:
             arg1 = linlogcut(F2 - F1, 10, 1000, tf=True)
             arg2 = linlogcut(F1 - F2, 10, 1000, tf=True)
-            log_pacc = -tf.log(1 + tf.exp(arg1)) - tf.log(1 + tf.exp(arg2))
+            log_pacc = -tf.math.log(1 + tf.exp(arg1)) - tf.math.log(1 + tf.exp(arg2))
         else:
             arg = linlogcut(F2 - F1, 10, 1000, tf=True)
-            log_pacc = -tf.log(1 + tf.exp(arg))
+            log_pacc = -tf.math.log(1 + tf.exp(arg))
 
         # mean square distance
         if metric is None:
@@ -515,7 +515,7 @@ class EnergyInvNet(InvNet):
 
         # acceptance probability
         arg = linlogcut(F[1:] - F[:-1], 10, 1000, tf=True)
-        log_pacc = -tf.log(1 + tf.exp(arg))
+        log_pacc = -tf.math.log(1 + tf.exp(arg))
 
         log_pacc_0_ = tf.concat([np.array([0], dtype=np.float32), log_pacc], 0)
         log_pacc__0 = tf.concat([log_pacc, np.array([0], dtype=np.float32)], 0)
