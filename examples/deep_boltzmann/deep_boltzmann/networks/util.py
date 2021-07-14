@@ -31,7 +31,7 @@ def plot_network(network):
     SVG(model_to_dot(network).create(prog='dot', format='svg'))
 
 def layer_to_dict(layer):
-    d = {'config' : keras.layers.serialize(layer),
+    d = {'config' : tf.keras.layers.serialize(layer),
          'input_shape' : layer.input_shape,
          'weights' : layer.get_weights()}
     return d
