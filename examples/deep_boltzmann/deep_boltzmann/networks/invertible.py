@@ -27,35 +27,35 @@ class InvNet(object):
         self.prior = prior
         self.connect_layers()
 
-        # compute total Jacobian for x->z transformation
-        log_det_xzs = []
-        for l in layers:
-            if hasattr(l, 'log_det_xz'):
-                log_det_xzs.append(l.log_det_xz)
-        if len(log_det_xzs) == 0:
-            self.TxzJ = None
-        else:
-            if len(log_det_xzs) == 1:
-                self.log_det_xz = log_det_xzs[0]
-            else:
-                self.log_det_xz = tf.keras.layers.Add()(log_det_xzs)
-            self.TxzJ = tf.keras.models.Model(inputs=self.input_x, outputs=[
-                                              self.output_z, self.log_det_xz])
+        # # compute total Jacobian for x->z transformation
+        # log_det_xzs = []
+        # for l in layers:
+        #     if hasattr(l, 'log_det_xz'):
+        #         log_det_xzs.append(l.log_det_xz)
+        # if len(log_det_xzs) == 0:
+        #     self.TxzJ = None
+        # else:
+        #     if len(log_det_xzs) == 1:
+        #         self.log_det_xz = log_det_xzs[0]
+        #     else:
+        #         self.log_det_xz = tf.keras.layers.Add()(log_det_xzs)
+        self.TxzJ = tf.keras.models.Model(inputs=self.input_x, outputs=[
+                                            self.output_z, self.log_det_Jxz])
 
         # compute total Jacobian for z->x transformation
-        log_det_zxs = []
-        for l in layers:
-            if hasattr(l, 'log_det_zx'):
-                log_det_zxs.append(l.log_det_zx)
-        if len(log_det_zxs) == 0:
-            self.TzxJ = None
-        else:
-            if len(log_det_zxs) == 1:
-                self.log_det_zx = log_det_zxs[0]
-            else:
-                self.log_det_zx = tf.keras.layers.Add()(log_det_zxs)
-            self.TzxJ = tf.keras.models.Model(inputs=self.input_z, outputs=[
-                                              self.output_x, self.log_det_zx])
+        # log_det_zxs = []
+        # for l in layers:
+        #     if hasattr(l, 'log_det_zx'):
+        #         log_det_zxs.append(l.log_det_zx)
+        # if len(log_det_zxs) == 0:
+        #     self.TzxJ = None
+        # else:
+        #     if len(log_det_zxs) == 1:
+        #         self.log_det_zx = log_det_zxs[0]
+        #     else:
+        #         self.log_det_zx = tf.keras.layers.Add()(log_det_zxs)
+        self.TzxJ = tf.keras.models.Model(inputs=self.input_z, outputs=[
+                                              self.output_x, self.log_det_Jzx])
 
     @classmethod
     def load(cls, filename, clear_session=True):
@@ -113,10 +113,8 @@ class InvNet(object):
         print('Done zx')
 
         # build networks
-        self.Txz = tf.keras.models.Model(inputs=self.input_x, outputs=[
-                                         self.output_z, self.log_det_Jxz])
-        self.Tzx = tf.keras.models.Model(inputs=self.input_z, outputs=[
-                                         self.output_x, self.log_det_Jzx])
+        self.Txz = tf.keras.models.Model(inputs=self.input_x, outputs=self.output_z)
+        self.Tzx = tf.keras.models.Model(inputs=self.input_z, outputs=self.output_x)
 
     def predict_log_det_Jxz(self, z):
         if self.TzxJ is None:
@@ -279,7 +277,7 @@ class InvNet(object):
         return tf.reduce_logsumexp([LL1, LL2])
 
     def transform_xz(self, x):
-        return self.Txz.predict(ensure_traj(x))[0]
+        return self.Txz.predict(ensure_traj(x))
 
     def transform_xzJ(self, x):
         x = ensure_traj(x)
@@ -288,11 +286,11 @@ class InvNet(object):
         #else:
         #    z, J = self.TxzJ.predict(x)
         #    return z, J[:, 0]
-        z, J = self.Txz.predict(x)
+        z, J = self.TxzJ.predict(x)
         return z, J[:,0]
 
     def transform_zx(self, z):
-        return self.Tzx.predict(ensure_traj(z))[0]
+        return self.Tzx.predict(ensure_traj(z))
 
     def transform_zxJ(self, z):
         z = ensure_traj(z)
@@ -301,7 +299,7 @@ class InvNet(object):
         # else:
         #     x, J = self.TzxJ.predict(z)
         #     return x, J[:, 0]
-        x, J = self.Tzx.predict(z)
+        x, J = self.TzxJ.predict(z)
         return x, J[:,0]
 
     def std_z(self, x):
@@ -476,8 +474,8 @@ class EnergyInvNet(InvNet):
         E2reg = linlogcut(E2, high_energy, max_energy, tf=True)
 
         # free energy of samples
-        F1 = E1reg - H1 + self.log_det_xz[:, 0]
-        F2 = E2reg - H2 - self.log_det_zx[:, 0]
+        F1 = E1reg - H1 + self.log_det_Jxz[:, 0]
+        F2 = E2reg - H2 - self.log_det_Jzx[:, 0]
 
         # acceptance probability
         if symmetric:

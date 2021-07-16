@@ -9,7 +9,7 @@ from deep_boltzmann.util import linlogcut
 
 def MLtrain_step_normal(bg, x_batch, optimizer, std=1.0, training=True):
     with tf.GradientTape() as tape:
-        output_z, log_det_Jxz = bg.Txz(x_batch)
+        output_z, log_det_Jxz = bg.TxzJ(x_batch)
         loss_value = -tf.reduce_mean(tf.reshape(log_det_Jxz, -1) -
                                      (0.5 / (std**2)) * tf.reduce_sum(output_z**2, axis=1))
     if training:
