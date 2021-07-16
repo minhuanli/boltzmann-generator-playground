@@ -25,10 +25,10 @@ class HungarianMapper:
             indices of particles subject to permutation. If None, all particles are used
 
         """
-        self.xref = xref
+        self.xref = xref # Shape [batch_number, n_particles * dim]
         self.dim = dim
         if identical_particles is None:
-            identical_particles = np.arange(xref.size)
+            identical_particles = np.arange(xref.shape[1]) # This line is problematic
         self.identical_particles = identical_particles
         self.ip_indices = np.concatenate([dim * self.identical_particles + i for i in range(dim)])
         self.ip_indices.sort()
