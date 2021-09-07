@@ -28,7 +28,7 @@ class HungarianMapper:
         self.xref = xref # Shape [batch_number, n_particles * dim]
         self.dim = dim
         if identical_particles is None:
-            identical_particles = np.arange(xref.shape[1]) # This line is problematic
+            identical_particles = np.arange(xref.shape[1]) # modified by MHL
         self.identical_particles = identical_particles
         self.ip_indices = np.concatenate([dim * self.identical_particles + i for i in range(dim)])
         self.ip_indices.sort()
