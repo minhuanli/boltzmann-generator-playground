@@ -319,7 +319,7 @@ class InvNet(object):
             E = np.sum(np.log(1 + (z/temperature)**2), axis=1)
         return E
 
-    def sample_z(self, temperature=1.0, nsample=100000, return_energy=False):
+    def sample_z(self, std=1.0, nsample=100000, return_energy=False):
 
         """ Samples from prior distribution in z and produces generated x configurations
         Parameters:
@@ -339,13 +339,13 @@ class InvNet(object):
         sample_z = None
         energy_z = None
         if self.prior == 'normal':
-            sample_z = np.sqrt(temperature) * np.random.randn(nsample, self.dim)
+            sample_z = std * np.random.randn(nsample, self.dim)
         elif self.prior == 'lognormal':
-            sample_z_normal = np.sqrt(temperature) * np.random.randn(nsample, self.dim)
+            sample_z_normal = std * np.random.randn(nsample, self.dim)
             sample_z = np.exp(sample_z_normal)
         elif self.prior == 'cauchy':
             from scipy.stats import cauchy
-            sample_z = cauchy(loc=0, scale=temperature).rvs(size=(nsample, self.dim))
+            sample_z = cauchy(loc=0, scale=std**2).rvs(size=(nsample, self.dim))
         else:
             raise NotImplementedError('Sampling for prior ' + self.prior + ' is not implemented.')
 
@@ -397,7 +397,7 @@ class EnergyInvNet(InvNet):
 
         return log_w
 
-    def sample(self, temperature=1.0, nsample=100000):
+    def sample(self, std=1.0, temperature=1.0, nsample=100000):
         """ Samples from prior distribution in x and produces generated x configurations
 
         Parameters:
@@ -427,7 +427,7 @@ class EnergyInvNet(InvNet):
         """
 
         sample_z, energy_z = self.sample_z(
-            temperature=temperature, nsample=nsample, return_energy=True)
+            std=std, nsample=nsample, return_energy=True)
         sample_x, Jzx = self.transform_zxJ(sample_z)
         energy_x = self.energy_model.energy(sample_x) / temperature
         logw = -energy_x + energy_z + Jzx
