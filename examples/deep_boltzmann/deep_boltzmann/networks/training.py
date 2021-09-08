@@ -125,7 +125,7 @@ class MLTrainer(object):
 class FlexibleTrainer(object):
 
     def __init__(self, bg, optimizer=None, lr=0.001, batch_size=1024,
-                 high_energy=100, max_energy=1e10, std=1.0, w_KL=1.0, w_ML=1.0, w_RC=0.0, w_L2_angle=0.0,
+                 high_energy=100, max_energy=1e10, std=1.0, temperature=1.0, w_KL=1.0, w_ML=1.0, w_RC=0.0, w_L2_angle=0.0,
                  rc_func=None, rc_min=0.0, rc_max=1.0, rc_dims=1, training_data=None,
                  weigh_ML=True, mapper=None):
         """
@@ -139,7 +139,7 @@ class FlexibleTrainer(object):
         self.high_energy = high_energy
         self.max_energy = max_energy
         self.std = std
-        self.temperature = 1.0
+        self.temperature = temperature
         self.weighML = weigh_ML
         self.mapper = mapper
         self.rc_func = rc_func
@@ -310,7 +310,7 @@ class FlexibleTrainer(object):
             # sample batch
             Isel = np.random.choice(I, size=self.batch_size, replace=True)
             x_batch = x_train[Isel]
-            z_batch = np.sqrt(self.temperature) * \
+            z_batch = self.std * \
                 np.random.randn(self.batch_size, self.bg.dim)
             # This Step is not valid in TF 2.0
             # l = self.dual_model.train_on_batch(x=[x_batch, w_batch], y=self.y)
