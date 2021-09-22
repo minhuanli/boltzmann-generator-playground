@@ -292,7 +292,7 @@ class FlexibleTrainer(object):
         grads = tape.gradient(loss_overall, self.dual_model.trainable_weights)
         self.optimizer.apply_gradients(
             zip(grads, self.dual_model.trainable_weights))
-        
+
         loss_record = [float(loss_overall)]
         if self.w_ML > 0.0:
             loss_record.append(float(tf.reduce_mean(ML_loss)))
@@ -300,17 +300,18 @@ class FlexibleTrainer(object):
             loss_record.append(float(tf.reduce_mean(KL_loss)))
         if self.w_L2_angle > 0.0:
             loss_record.append(float(tf.reduce_mean(L2_angle_loss)))
-        
-        return loss_record
-        
 
-    def train(self, x_train, epochs=2000, verbose=1):
+        return loss_record
+
+    def train(self, x_train, epochs=2000, verbose=1, samplez_std=None):
         I = np.arange(x_train.shape[0])
+        if samplez_std is None:
+            samplez_std = self.std
         for e in range(epochs):
             # sample batch
             Isel = np.random.choice(I, size=self.batch_size, replace=True)
             x_batch = x_train[Isel]
-            z_batch = self.std * \
+            z_batch = samplez_std * \
                 np.random.randn(self.batch_size, self.bg.dim)
             # This Step is not valid in TF 2.0
             # l = self.dual_model.train_on_batch(x=[x_batch, w_batch], y=self.y)
@@ -320,7 +321,7 @@ class FlexibleTrainer(object):
             # print
             if verbose > 0:
                 str_ = 'Epoch ' + str(e) + '/' + str(epochs) + ' '
-                for i,name in enumerate(self.loss_name):
+                for i, name in enumerate(self.loss_name):
                     str_ += name + ' '
                     str_ += '{:.4f}'.format(self.loss_train[-1][i]) + ' '
                 print(str_)
