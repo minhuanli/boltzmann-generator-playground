@@ -270,6 +270,7 @@ basis_Zs['MET'] = [
     ["HB2", "CB", "CA", "CG"], # improper
     ["H", "CB", "CA", "CG"],
     ["H2", "CB", "CA", "CG"],
+    ["H3", "CB", "CA", "CG"],
     ["HB3", "CB", "CA", "CG"], # improper
     ["HG2", "CG", "CB", "SD"], # improper
     ["HG3", "CG", "CB", "SD"], # improper
