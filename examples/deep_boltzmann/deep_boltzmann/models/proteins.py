@@ -162,6 +162,7 @@ basis_Zs['TRP'] = [
     ["CZ3", "CZ2", "CE3", "CE2"],
     ["HZ3", "CZ3", "CZ2", "CE3"],
     ["CH2", "CB", "CA", "C"],
+    ["HH2", "CH2", "CB", "CA"],
     ["NH2", "CB", "CA", "C"],
     ]
 
