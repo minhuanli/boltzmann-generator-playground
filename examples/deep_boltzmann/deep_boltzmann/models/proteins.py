@@ -145,6 +145,24 @@ basis_Zs['TRP'] = [
     ["H", "N", "CA", "C"],
     ["O", "C", "CA", "N"],
     ["HA", "CA", "N", "C"],
+    ["CB", "CA", "N", "C"],
+    ["HB2", "CB", "CA", "C"],
+    ["HB3", "CB", "CA", "C"],
+    ["CG", "CB", "CA", "N"],
+    ["CD1", "CG", "CB", "CA"],
+    ["HD1", "CD1", "CG", "CB"],
+    ["CD2", "CD1", "CG", "CB"],
+    ["NE1", "CG", "CB", "CA"],
+    ["HE1", "NE1", "CG", "CB"]
+    ["CE2", "NE1", "CG", "CB"],
+    ["CE3", "CE2", "NE1", "CG"],
+    ["HE3", "CE3", "CE2", "NE1"]
+    ["CZ2", "CE3", "CE2", "NE1"],
+    ["HZ2", "CZ2", "CE3", "CE2"],
+    ["CZ3", "CZ2", "CE3", "CE2"],
+    ["HZ3", "CZ3", "CZ2", "CE3"],
+    ["CH2", "CB", "CA", "C"],
+    ["NH2", "CB", "CA", "C"],
     ]
 
 basis_Zs['TYR'] = [
