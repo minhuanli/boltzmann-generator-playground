@@ -156,7 +156,7 @@ basis_Zs['TRP'] = [
     ["HE1", "NE1", "CG", "CB"],
     ["CE2", "NE1", "CG", "CB"],
     ["CE3", "CE2", "NE1", "CG"],
-    ["HE3", "CE3", "CE2", "NE1"]
+    ["HE3", "CE3", "CE2", "NE1"],
     ["CZ2", "CE3", "CE2", "NE1"],
     ["HZ2", "CZ2", "CE3", "CE2"],
     ["CZ3", "CZ2", "CE3", "CE2"],
