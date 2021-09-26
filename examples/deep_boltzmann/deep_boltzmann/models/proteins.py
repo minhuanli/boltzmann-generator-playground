@@ -245,6 +245,7 @@ basis_Zs['LYS'] = [
     ["CD", "CG", "CB", "CA"], # torsion
     ["CE", "CD", "CG", "CB"], # torsion
     ["NZ", "CE", "CD", "CG"], # torsion
+    ["OXT", "CE", "CD", "CG"],
     ["HB2", "CB", "CA", "CG"], # improper
     ["HB3", "CB", "CA", "CG"], # improper
     ["HG2", "CG", "CB", "CD"], # improper
@@ -267,6 +268,8 @@ basis_Zs['MET'] = [
     ["SD", "CG", "CB", "CA"], # torsion
     ["CE", "SD", "CG", "CB"], # torsion
     ["HB2", "CB", "CA", "CG"], # improper
+    ["H", "CB", "CA", "CG"],
+    ["H2", "CB", "CA", "CG"],
     ["HB3", "CB", "CA", "CG"], # improper
     ["HG2", "CG", "CB", "SD"], # improper
     ["HG3", "CG", "CB", "SD"], # improper
