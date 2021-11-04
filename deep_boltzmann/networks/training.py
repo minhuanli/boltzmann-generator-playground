@@ -2,8 +2,6 @@ import sys
 import numbers
 import numpy as np
 import tensorflow as tf
-#import keras
-from deep_boltzmann.networks.invertible_coordinate_transforms import MixedCoordinatesTransformation
 from deep_boltzmann.util import linlogcut
 
 
@@ -17,9 +15,8 @@ def MLtrain_step_normal(bg, x_batch, optimizer, std=1.0, training=True):
         optimizer.apply_gradients(zip(grads, bg.Txz.trainable_weights))
     return loss_value
 
-
 class MLTrainer(object):
-
+    
     def __init__(self, bg, optimizer=None, lr=0.001, clipnorm=None,
                  std=1.0, reg_Jxz=0.0, save_test_energies=False):
 
@@ -33,46 +30,6 @@ class MLTrainer(object):
             else:
                 self.optimizer = tf.keras.optimizers.Adam(
                     learning_rate=lr, clipnorm=clipnorm)
-
-        # def loss_ML_normal(y_true, y_pred):
-        #     return -bg.log_likelihood_z_normal(std=std)
-
-        # def loss_ML_lognormal(y_true, y_pred):
-        #     return -bg.log_likelihood_z_lognormal(std=std)
-
-        # def loss_ML_cauchy(y_true, y_pred):
-        #     return -bg.log_likelihood_z_cauchy(scale=std)
-
-        # def loss_ML_normal_reg(y_true, y_pred):
-        #     return -bg.log_likelihood_z_normal(std=std) + reg_Jxz*bg.reg_Jxz_uniform()
-
-        # def loss_ML_lognormal_reg(y_true, y_pred):
-        #     return -bg.log_likelihood_z_lognormal(std=std) + reg_Jxz*bg.reg_Jxz_uniform()
-
-        # def loss_ML_cauchy_reg(y_true, y_pred):
-        #     return -bg.log_likelihood_z_cauchy(scale=std) + reg_Jxz*bg.reg_Jxz_uniform()
-
-        # print('Compiling the graph')
-        # if bg.prior == 'normal':
-        #     if reg_Jxz == 0:
-        #         bg.Txz.compile(optimizer, loss=loss_ML_normal)
-        #     else:
-        #         bg.Txz.compile(optimizer, loss=loss_ML_normal_reg)
-
-        # elif bg.prior == 'lognormal':
-        #     if reg_Jxz == 0:
-        #         bg.Txz.compile(optimizer, loss=loss_ML_lognormal)
-        #     else:
-        #         bg.Txz.compile(optimizer, loss=loss_ML_lognormal_reg)
-
-        # elif bg.prior == 'cauchy':
-        #     if reg_Jxz == 0:
-        #         bg.Txz.compile(optimizer, loss=loss_ML_cauchy)
-        #     else:
-        #         bg.Txz.compile(optimizer, loss=loss_ML_cauchy_reg)
-
-        # else:
-        #     raise NotImplementedError('ML for prior ' + bg.prior + ' is not implemented.')
 
         self.loss_train = []
         self.loss_val = []
@@ -165,37 +122,7 @@ class FlexibleTrainer(object):
             self.loss_name.append("KL Loss")
         if self.w_L2_angle > 0.0:
             self.loss_name.append("L2 Angle Loss")
-
-        # if weigh_ML:
-        #     losses = [self.loss_ML_weighted, self.loss_KL]
-        # else:
-        #     losses = [self.loss_ML, self.loss_KL]
-        # loss_weights = [w_ML, w_KL]
-
-        # # TODO: MHL, Clear RC-Related training Term in TF2.0
-        # if w_RC > 0.0:
-        #     if rc_dims == 1:
-        #         self.gmeans = np.linspace(rc_min, rc_max, 11)
-        #         self.gstd = (rc_max - rc_min) / 11.0
-        #         losses.append(self.loss_RC)
-        #     else:
-        #         # make nD grid
-        #         self.gmeans = np.array([_.ravel() for _ in np.meshgrid(
-        #             *[np.linspace(rc_min[__], rc_max[__], 11) for __ in range(rc_dims)])]).astype(np.float32)
-        #         # check if experimental data is supplied, if so use them to determine kde centers
-        #         if training_data is not None:
-        #             raise NotImplementedError()
-        #         self.gstd = ((rc_max - rc_min) /
-        #                      11.0).reshape((1, -1)).astype(np.float32)
-        #         losses.append(self.loss_RCnd)
-
-        #     # outputs.append(bg.output_x)
-        #     loss_weights.append(w_RC)
-
-        # if w_L2_angle > 0.0:
-        #     # outputs.append(bg.output_x)
-        #     losses.append(self.loss_L2_angle_penalization)
-        #     loss_weights.append(w_L2_angle)
+ 
 
         # build estimator
         if optimizer is None:

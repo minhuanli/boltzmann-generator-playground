@@ -3,45 +3,6 @@ import tensorflow as tf
 from simtk import unit
 from simtk import openmm
 
-
-class DoubleWellPotential(object):
-    
-    params_default = {
-        'a4' : 1.0,
-        'a2' : 6.0,
-        'a1' : 1.0,
-        'k' : 1.0,
-        'dim' : 2
-    }
-    
-    def __init__(self, params=None):
-        # set parameters
-        if params is None:
-            params = self.__class__.params_default
-        self.params = params
-
-        # useful variables
-        self.dim = self.params['dim']
-    
-    def __call__(self, configuration):
-        dimer_energy = self.params['a4'] * configuration[:, 0] ** 4\
-            - self.params['a2'] * configuration[:, 0] ** 2\
-            + self.params['a1'] * configuration[:, 0]
-            
-        oscillator_energy = 0.0
-        if self.dim == 2:
-            oscillator_energy = (self.params['k'] / 2.0) * configuration[:, 1] ** 2
-        if self.dim > 2:
-            oscillator_energy = np.sum((self.params['k'] / 2.0) * configuration[:, 1:] ** 2, axis=1)
-        return  dimer_energy + oscillator_energy
-    
-    def energy(self, x):
-        return self(x)
-    
-    def energy_tf(self, x):
-        return self(x)
-
-
 class OpenMMEnergy(object):
         
     def __init__(self, openmm_system, openmm_integrator, length_scale, n_atoms=None, openmm_integrator_args=None, n_steps=0):
@@ -171,3 +132,54 @@ def wrap_energy_as_tf_op(compute_energy, n_steps=0):
             return gradients_in
         return potential_energy, _grad_fn
     return _energy
+
+
+def setup_protein(pdbmodel_dir, temp, implicit_solvent=True):
+    """ Sets up protein Topology and Energy Model
+
+    Parameters
+    ----------
+    pdbmodel_dir: str
+        path str to the model PDB file
+
+    temp: int or float
+        Temperature of the system in Kelvin
+
+    implicit_solvnet: Boolean, default True
+        Choose which force field file to use. If True, use the implicit solvent one; else use the explicit solvent model
+
+    Returns
+    -------
+    top : mdtraj Topology object
+        Protein topology
+    energy : Energy object
+        Energy model
+    """
+    INTEGRATOR_ARGS = (temp*unit.kelvin, 1.0 /
+                       unit.picoseconds, 2.0*unit.femtoseconds)
+
+    from simtk.openmm import app
+    from simtk.openmm import LangevinIntegrator
+    import mdtraj as md
+
+    pdb = app.PDBFile(pdbmodel_dir)
+    if implicit_solvent:
+        forcefield = app.ForceField(
+            'amber99sb.xml', 'amber99_obc.xml')  # implicit Solvent
+    else:
+        forcefield = app.ForceField(
+            'amber14/protein.ff14SB.xml', 'amber14/tip3p.xml')  # explicit Solvent
+
+    system = forcefield.createSystem(pdb.topology, removeCMMotion=False,
+                                     nonbondedMethod=app.CutoffNonPeriodic, nonbondedCutoff=1.0*unit.nanometers,
+                                     constraints=None, rigidWater=True)
+
+    protein_omm_energy = OpenMMEnergy(system,
+                                      LangevinIntegrator,
+                                      unit.nanometers,
+                                      n_atoms=md.Topology().from_openmm(pdb.topology).n_atoms,
+                                      openmm_integrator_args=INTEGRATOR_ARGS)
+
+    mdtraj_topology = md.Topology().from_openmm(pdb.topology)
+    return mdtraj_topology, protein_omm_energy
+

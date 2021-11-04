@@ -367,30 +367,24 @@ def mdtraj2Z(mdtraj_topology, cartesian=None):
     else:
         return Z
 
-# def mdtraj2Z(mdtraj_topology):
-#     """
-#         mdtraj_topology
-#         cartesian: if not None list of atomnames which are placed directly.
-#     """
-#     Z = []
-#     for i,_ in enumerate(mdtraj_topology.residues):
-#         nterm = False
-#         cterm = False
-#         if i == 0:
-#             nterm = True
-#         if (i + 1) == mdtraj_topology.n_residues:
-#             cterm = True
-#
-#         resatoms = {a.name:a.index for a in _.atoms if a.name}
-#         resname = _.name
-#         for entry in basis_Zs[resname]: # template entry:
-#             Z.append([resatoms[_e] for _e in entry])
-#         if nterm:
-#             # set two additional N-term protons
-#             Z.append([resatoms["H2"], resatoms["N"], resatoms["CA"], resatoms["H"] ])
-#             Z.append([resatoms["H3"], resatoms["N"], resatoms["CA"], resatoms["H2"] ])
-#         if cterm:
-#             # place OXT
-#             Z.append([resatoms["OXT"], resatoms["C"], resatoms["CA"], resatoms["O"] ])
-#
-#     return Z
+def get_indices(top, cartesian_CYS=True):
+    """ Returns Cartesian and IC indices
+
+    Returns
+    -------
+    cart : array
+        Cartesian atom selection
+    Z : array
+        Z index matrix
+
+    """
+    import numpy as np 
+    cartesian = ['CA', 'C', 'N']
+    cart = top.select(' '.join(["name " + s for s in cartesian]))
+    if cartesian_CYS:
+        Z_, _carts = mdtraj2Z(top,  cartesian="resname CYS and mass>2 and sidechain")
+        Z_ = np.array(Z_)
+        cart = np.sort(np.concatenate((cart,_carts)))
+    else:
+        Z_ = np.array(mdtraj2Z(top))
+    return cart, Z_

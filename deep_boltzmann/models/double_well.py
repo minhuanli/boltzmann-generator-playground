@@ -56,3 +56,41 @@ class DoubleWell(object):
         axis.set_ylim(energies.min() - 2.0, energies[int(energies.size / 2)] + 2.0)
 
         return x_grid, energies
+
+class DoubleWellPotential(object):
+    
+    params_default = {
+        'a4' : 1.0,
+        'a2' : 6.0,
+        'a1' : 1.0,
+        'k' : 1.0,
+        'dim' : 2
+    }
+    
+    def __init__(self, params=None):
+        # set parameters
+        if params is None:
+            params = self.__class__.params_default
+        self.params = params
+
+        # useful variables
+        self.dim = self.params['dim']
+    
+    def __call__(self, configuration):
+        dimer_energy = self.params['a4'] * configuration[:, 0] ** 4\
+            - self.params['a2'] * configuration[:, 0] ** 2\
+            + self.params['a1'] * configuration[:, 0]
+            
+        oscillator_energy = 0.0
+        if self.dim == 2:
+            oscillator_energy = (self.params['k'] / 2.0) * configuration[:, 1] ** 2
+        if self.dim > 2:
+            oscillator_energy = np.sum((self.params['k'] / 2.0) * configuration[:, 1:] ** 2, axis=1)
+        return  dimer_energy + oscillator_energy
+    
+    def energy(self, x):
+        return self(x)
+    
+    def energy_tf(self, x):
+        return self(x)
+
