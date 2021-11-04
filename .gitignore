@@ -131,3 +131,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Customized Files
+examples/pdz3/BG_ImplicitSolvent_KLtrain_model.pkl
+examples/pdz3/BG_ImplicitSolvent_MLtrain_model.pkl
+examples/pdz3/BG_save_after_ML_TF2_longerML2.pkl
+examples/pdz3/implicit_traj.h5
+examples/pdz3/traj.h5
