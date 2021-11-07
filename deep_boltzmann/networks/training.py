@@ -2,27 +2,16 @@ import sys
 import numbers
 import numpy as np
 import tensorflow as tf
-from deep_boltzmann.util import linlogcut
-
-
-def MLtrain_step_normal(bg, x_batch, optimizer, std=1.0, training=True):
-    with tf.GradientTape() as tape:
-        output_z, log_det_Jxz = bg.TxzJ(x_batch)
-        loss_value = -tf.reduce_mean(tf.reshape(log_det_Jxz, -1) -
-                                     (0.5 / (std**2)) * tf.reduce_sum(output_z**2, axis=1))
-    if training:
-        grads = tape.gradient(loss_value, bg.Txz.trainable_weights)
-        optimizer.apply_gradients(zip(grads, bg.Txz.trainable_weights))
-    return loss_value
+import deep_boltzmann.networks.losses as losses
 
 class MLTrainer(object):
-    
+
     def __init__(self, bg, optimizer=None, lr=0.001, clipnorm=None,
-                 std=1.0, reg_Jxz=0.0, save_test_energies=False):
+                 std_z=1.0, save_test_energies=False):
 
         self.bg = bg
         self.save_test_energies = save_test_energies
-        self.std = std
+        self.std_z = std_z
 
         if optimizer is None:
             if clipnorm is None:
@@ -37,28 +26,56 @@ class MLTrainer(object):
             self.energies_x_val = []
             self.energies_z_val = []
 
-    def train(self, x_train, x_val=None, epochs=2000, batch_size=1024, verbose=1, save_test_energies=False):
+    def train(self, x_train, x_val=None, epochs=2000, batch_size=1024, verbose=1):
+
+        inputs = []
+        outputs = []
+        y = []
+
+        # Create inputs and outputs
+        inputs.append(self.bg.input_x)
+        outputs.append(self.bg.output_z)
+        outputs.append(self.bg.log_det_Jxz)
+
+        # Create a fake y for train_on_batch
+        y.append(np.zeros((batch_size, self.bg.dim)))
+        y.append(np.zeros(batch_size))
+
+        # Define ML loss function
+        ml_loss = tf.keras.layers.Lambda(losses.MLlossNormal(
+            std_z=self.std_z), name="ML_loss_layer")([self.bg.output_z, self.bg.log_det_Jxz])
+
+        # Construct the model
+        ML_model = tf.keras.models.Model(
+            inputs=inputs, outputs=outputs, name="ML_model")
+        ML_model.add_loss(ml_loss)
+        ML_model.add_metric(ml_loss, name="ML loss")
+        ML_model.compile(self.optimizer)
 
         N = x_train.shape[0]
         I = np.arange(N)
-        #y = np.zeros((batch_size, self.bg.dim))
 
         for e in range(epochs):
             # sample batch
             x_batch = x_train[np.random.choice(
                 I, size=batch_size, replace=True)]
-            # l = self.bg.Txz.train_on_batch(x=x_batch, y=y) # This line is no not valid in TF 2.0
-            l = MLtrain_step_normal(
-                self.bg, x_batch, self.optimizer, std=self.std)
-            self.loss_train.append(l)
+            losses_for_this_iteration = ML_model.train_on_batch(
+                x=x_batch, y=y, return_dict=True
+            )
+
+            for loss_name in losses_for_this_iteration:
+                self.loss_train.append(losses_for_this_iteration[loss_name])
 
             # validate
             if x_val is not None:
                 xval_batch = x_val[np.random.choice(
                     I, size=batch_size, replace=True)]
-                l = MLtrain_step_normal(
-                    self.bg, x_batch, self.optimizer, std=self.std, training=False)
-                self.loss_val.append(l)
+                val_losses_for_this_iteration = ML_model.test_on_batch(
+                    x=xval_batch, y=y, return_dict=True
+                )
+                for loss_name in val_losses_for_this_iteration:
+                    self.loss_val.append(
+                        val_losses_for_this_iteration[loss_name])
 
                 if self.save_test_energies:
                     z = self.bg.sample_z(nsample=batch_size)
@@ -82,8 +99,9 @@ class MLTrainer(object):
 class FlexibleTrainer(object):
 
     def __init__(self, bg, optimizer=None, lr=0.001, batch_size=1024,
-                 high_energy=100, max_energy=1e10, std=1.0, temperature=1.0, w_KL=1.0, w_ML=1.0, w_RC=0.0, w_L2_angle=0.0,
-                 rc_func=None, rc_min=0.0, rc_max=1.0, rc_dims=1, training_data=None,
+                 high_energy=100, max_energy=1e10, std_z=1.0, temperature=1.0, 
+                 w_KL=1.0, w_ML=1.0, w_L2_angle=0.0, w_xstal=0.0, 
+                 training_data=None,
                  weigh_ML=True, mapper=None):
         """
         Parameters:
@@ -95,13 +113,11 @@ class FlexibleTrainer(object):
         self.batch_size = batch_size
         self.high_energy = high_energy
         self.max_energy = max_energy
-        self.std = std
+        self.std_z = std_z
         self.temperature = temperature
         self.weighML = weigh_ML
         self.mapper = mapper
         self.rc_func = rc_func
-
-        inputs = [bg.input_x, bg.input_z]
 
         self.w_ML = w_ML
         self.w_KL = w_KL
@@ -122,7 +138,6 @@ class FlexibleTrainer(object):
             self.loss_name.append("KL Loss")
         if self.w_L2_angle > 0.0:
             self.loss_name.append("L2 Angle Loss")
- 
 
         # build estimator
         if optimizer is None:

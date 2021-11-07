@@ -325,25 +325,6 @@ def ics2xyz_local(ics, Z_indices, index2zorder, xyz):
                           xyz[index2zorder[Z_indices[i, 3]]],
                           ics[:, 3*i:3*i+1], ics[:, 3*i+1:3*i+2], ics[:, 3*i+2:3*i+3]))
 
-# def ics2xyz_local_log_det_jac(ics, Z_indices, index2zorder, xyz):
-#
-#     batchsize = tf.shape(ics)[0]
-#
-#     log_det_jac = tf.zeros((batchsize,))
-#
-#     for i in range(Z_indices.shape[0]):
-#         args = tf.concat([
-#             ics[:, 3*i:3*i+1],
-#             ics[:, 3*i+1:3*i+2],
-#             ics[:, 3*i+2:3*i+3]
-#         ], axis=-1)
-#         xyz.append(ic2xyz(xyz[index2zorder[Z_indices[i, 1]]],
-#                           xyz[index2zorder[Z_indices[i, 2]]],
-#                           xyz[index2zorder[Z_indices[i, 3]]],
-#                           args[..., 0:1], args[..., 1:2], args[..., 2:3]))
-#         log_det_jac += tf.linalg.slogdet(batch_jacobian(xyz[-1], args))[-1]
-#
-#     return log_det_jac
 def ics2xyz_local_log_det_jac(ics, Z_indices, index2zorder, xyz):
     batchsize = tf.shape(ics)[0]
     log_det_jac = tf.zeros((batchsize,))
