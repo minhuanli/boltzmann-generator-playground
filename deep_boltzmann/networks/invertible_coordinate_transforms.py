@@ -4,15 +4,6 @@ import tensorflow as tf
 #from tensorflow.python.ops.parallel_for.gradients import batch_jacobian
 from deep_boltzmann.networks import IndexLayer
 
-
-# def log_det_jacobian(outputs, inputs):
-#     from tensorflow.python.ops.parallel_for.gradients import batch_jacobian
-#     J = batch_jacobian(outputs, inputs, use_pfor=False)
-#     s = tf.svd(J, compute_uv=False)
-#     s = tf.abs(s) + 1e-6  # regularize
-#     return tf.reduce_sum(tf.log(s), axis=1, keepdims=True)
-
-
 def pca(X0, keepdims=None):
     if keepdims is None:
         keepdims = X0.shape[1]
