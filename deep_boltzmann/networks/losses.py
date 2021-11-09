@@ -36,7 +36,13 @@ class KLloss:
         Ereg = linlogcut(E, self.Ehigh, self.Emax, tf=True)
         return Ereg - log_det_Jzx
 
-
+def loss_L2_angle_penalization(bg):
+    losses = []
+    for layer in bg.layers:
+        if hasattr(layer, "angle_loss"):
+            losses.append(layer.angle_loss)
+    loss = sum(losses)
+    return loss[..., None]
 
 
 
