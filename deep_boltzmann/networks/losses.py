@@ -13,7 +13,7 @@ class MLlossNormal:
     
     def __call__(self, args):
         output_z, log_det_Jxz = args[0], args[1]
-        energy_z = (0.5/self.std_z**2) * tf.reduce_sum(output_z**2, axis=1)
+        energy_z = (0.5/self.std_z**2) * tf.reduce_sum(output_z**2, axis=1, keepdims=True)
         return energy_z - log_det_Jxz 
 
 class KLloss:
