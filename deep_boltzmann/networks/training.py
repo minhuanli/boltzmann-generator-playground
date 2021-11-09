@@ -4,6 +4,7 @@ import tensorflow as tf
 import deep_boltzmann.networks.losses as losses
 import time
 
+
 class MLTrainer(object):
 
     def __init__(self, bg, optimizer=None, lr=0.001, clipnorm=None,
@@ -26,8 +27,6 @@ class MLTrainer(object):
             self.energies_x_val = []
             self.energies_z_val = []
 
-    def train(self, x_train, x_val=None, epochs=2000, batch_size=1024, verbose=1, record_time=False):
-
         inputs = []
         outputs = []
 
@@ -41,11 +40,13 @@ class MLTrainer(object):
             std_z=self.std_z), name="ML_loss_layer")([self.bg.output_z, self.bg.log_det_Jxz])
 
         # Construct the model
-        ML_model = tf.keras.models.Model(
+        self.ML_model = tf.keras.models.Model(
             inputs=inputs, outputs=outputs, name="ML_model")
-        ML_model.add_loss(ml_loss)
-        ML_model.add_metric(ml_loss, name="ML_loss")
-        ML_model.compile(self.optimizer)
+        self.ML_model.add_loss(ml_loss)
+        self.ML_model.add_metric(ml_loss, name="ML_loss")
+        self.ML_model.compile(self.optimizer)
+
+    def train(self, x_train, x_val=None, epochs=2000, batch_size=1024, verbose=1, record_time=False):
 
         N = x_train.shape[0]
         I = np.arange(N)
@@ -53,7 +54,7 @@ class MLTrainer(object):
         if x_val is not None:
             Nt = x_val.shape[0]
             It = np.arange(Nt)
-        
+
         @tf.function
         def steptrain(model_and_data):
             model, data = model_and_data
@@ -65,24 +66,26 @@ class MLTrainer(object):
             return model.test_step((data,))
 
         for e in range(epochs):
-            if record_time: start_time = time.time()
+            if record_time:
+                start_time = time.time()
 
             # sample batch
             x_batch = x_train[np.random.choice(
                 I, size=batch_size, replace=True)]
-            
+
             # single step train
-            losses_for_this_iteration = steptrain((ML_model, [x_batch]))
+            losses_for_this_iteration = steptrain((self.ML_model, [x_batch]))
             self.loss_train.append(float(losses_for_this_iteration["ML_loss"]))
 
-            if record_time: time_this_round = round(time.time() - start_time, 3)
+            if record_time:
+                time_this_round = round(time.time() - start_time, 3)
 
             # validate
             if x_val is not None:
                 xval_batch = x_val[np.random.choice(
                     It, size=batch_size, replace=True)]
                 val_losses_for_this_iteration = steptest(
-                    (ML_model, [xval_batch]))
+                    (self.ML_model, [xval_batch]))
                 self.loss_val.append(
                     val_losses_for_this_iteration["ML_loss"])
 
@@ -140,8 +143,6 @@ class FlexibleTrainer(object):
 
         self.loss_train = []
 
-    def train(self, x_train, epochs=2000, verbose=1, samplez_std=None, record_time=False):
-
         inputs = []
         outputs = []
         applied_loss = []
@@ -162,7 +163,7 @@ class FlexibleTrainer(object):
         if self.w_KL > 0.0:
             inputs.append(self.bg.input_z)
 
-            outputs.append(self.bg.output_x) 
+            outputs.append(self.bg.output_x)
             outputs.append(self.bg.log_det_Jzx)
 
             kl_loss_instance = losses.KLloss(
@@ -175,9 +176,12 @@ class FlexibleTrainer(object):
             loss_for_metric.append((kl_loss, "KL_loss"))
 
         if self.w_L2_angle > 0.0:
-            if self.w_KL <= 0.0: raise ValueError("Please set an nonzero w_kl when using L2 penalizaiton!")
+            if self.w_KL <= 0.0:
+                raise ValueError(
+                    "Please set an nonzero w_kl when using L2 penalizaiton!")
 
-            l2_loss = tf.keras.layers.Lambda(losses.loss_L2_angle_penalization, name="l2_loss")(self.bg)
+            l2_loss = tf.keras.layers.Lambda(
+                losses.loss_L2_angle_penalization, name="l2_loss")(self.bg)
             applied_loss.append(l2_loss*self.w_L2_angle)
             loss_for_metric.append((l2_loss, "L2_angle_Loss"))
 
@@ -185,12 +189,14 @@ class FlexibleTrainer(object):
             raise NotImplementedError
 
         # Construct model
-        dual_model = tf.keras.models.Model(
+        self.dual_model = tf.keras.models.Model(
             inputs=inputs, outputs=outputs, name="Dual_Model")
-        dual_model.add_loss(applied_loss)
+        self.dual_model.add_loss(applied_loss)
         for loss, loss_name in loss_for_metric:
-            dual_model.add_metric(loss, name=loss_name)
-        dual_model.compile(optimizer=self.optimizer)
+            self.dual_model.add_metric(loss, name=loss_name)
+        self.dual_model.compile(optimizer=self.optimizer)
+
+    def train(self, x_train, epochs=2000, verbose=1, samplez_std=None, record_time=False):
 
         I = np.arange(x_train.shape[0])
         if samplez_std is None:
@@ -203,7 +209,8 @@ class FlexibleTrainer(object):
 
         for e in range(epochs):
 
-            if record_time: start_time = time.time()
+            if record_time:
+                start_time = time.time()
 
             input_for_training = []
 
@@ -219,18 +226,19 @@ class FlexibleTrainer(object):
                 input_for_training.append(z_batch)
 
             # Single step train
-            losses_for_this_iteration = steptrain([dual_model, input_for_training])
+            losses_for_this_iteration = steptrain(
+                [self.dual_model, input_for_training])
 
             loss_record_this_step = []
             str_ = 'Epoch ' + str(e) + '/' + str(epochs) + ' '
             for loss_name, loss_value in losses_for_this_iteration.items():
-                loss_record_this_step.append(round(float(loss_value),4))
+                loss_record_this_step.append(round(float(loss_value), 4))
                 str_ += loss_name + ' '
                 str_ += '{:.4f}'.format(float(loss_value)) + ' '
 
             self.loss_train.append(loss_record_this_step)
 
-            if record_time: 
+            if record_time:
                 time_this_round = round(time.time() - start_time, 3)
                 str_ += "Time: " + str(time_this_round)
 
