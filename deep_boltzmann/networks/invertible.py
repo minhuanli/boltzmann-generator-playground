@@ -6,6 +6,8 @@ from deep_boltzmann.util import ensure_traj
 from deep_boltzmann.networks.invertible_layers import *
 from deep_boltzmann.networks.invertible_coordinate_transforms import *
 
+import deep_boltzmann.networks.losses as losses
+
 
 class InvNet(object):
     def __init__(self, dim, layers, prior='normal'):
@@ -25,12 +27,6 @@ class InvNet(object):
         self.layers = layers
         self.prior = prior
         self.connect_layers()
-
-        self.TxzJ = tf.keras.models.Model(inputs=self.input_x, outputs=[
-                                            self.output_z, self.log_det_Jxz])
-
-        self.TzxJ = tf.keras.models.Model(inputs=self.input_z, outputs=[
-                                              self.output_x, self.log_det_Jzx])
 
     @classmethod
     def load(cls, filename, clear_session=True):
@@ -88,36 +84,56 @@ class InvNet(object):
         print('Done zx')
 
         # build networks
-        self.Txz = tf.keras.models.Model(inputs=self.input_x, outputs=self.output_z)
-        self.Tzx = tf.keras.models.Model(inputs=self.input_z, outputs=self.output_x)
+        self.Txz = tf.keras.models.Model(
+            inputs=self.input_x, outputs=self.output_z)
+        self.Tzx = tf.keras.models.Model(
+            inputs=self.input_z, outputs=self.output_x)
 
-    @property
-    def log_det_Jxz(self):
-        """ Log of |det(dz/dx)| for the current batch. Format is batchsize x 1 or a number """
-        # return self.log_det_xz.output
+        # Full x -> z transformation with Jacobian
         log_det_Jxzs = []
-        for l in self.layers:
-            if hasattr(l, 'log_det_Jxz'):
-                log_det_Jxzs.append(l.log_det_Jxz)
+        for layer in self.layers:
+            if hasattr(layer, 'log_det_Jxz'):
+                log_det_Jxzs.append(layer.log_det_Jxz)
         if len(log_det_Jxzs) == 0:
-            return tf.ones((self.output_z.shape[0],))
-        if len(log_det_Jxzs) == 1:
-            return log_det_Jxzs[0]
-        return tf.reduce_sum(log_det_Jxzs, axis=0, keepdims=False)
-
-    @property
-    def log_det_Jzx(self):
-        """ Log of |det(dx/dz)| for the current batch. Format is batchsize x 1 or a number """
-        # return self.log_det_zx.output
+            self.TxzJ = None
+            self.log_det_Jxz = tf.ones((self.output_z.shape[0],))
+        else:
+            # name of the layer with log(det(J))
+            log_det_name = "log_det_Jxz"
+            if len(log_det_Jxzs) == 1:
+                self.log_det_Jxz = tf.keras.layers.Lambda(lambda x: x, name=log_det_name)(
+                    log_det_Jxzs[0]
+                )
+            else:
+                self.log_det_Jxz = tf.keras.layers.Add(
+                    name=log_det_name)(log_det_Jxzs)
+            self.TxzJ = tf.keras.Model(
+                inputs=self.input_x,
+                outputs=[self.output_z, self.log_det_Jxz],
+                name="TxzJ"
+            )
+        
+        # Full z -> x transformation with Jacobian
         log_det_Jzxs = []
-        for l in self.layers:
-            if hasattr(l, 'log_det_Jzx'):
-                log_det_Jzxs.append(l.log_det_Jzx)
+        for layer in self.layers:
+            if hasattr(layer, 'log_det_Jzx'):
+                log_det_Jzxs.append(layer.log_det_Jzx)
         if len(log_det_Jzxs) == 0:
-            return tf.ones((self.output_x.shape[0],))
-        if len(log_det_Jzxs) == 1:
-            return log_det_Jzxs[0]
-        return tf.reduce_sum(log_det_Jzxs, axis=0, keepdims=False)
+            self.TzxJ = None
+            self.log_det_Jzx = tf.ones((self.output_x.shape[0],))
+        else:
+            log_det_name = "log_det_Jzx"    # name of the layer with log(det(J))
+            if len(log_det_Jzxs) == 1:
+                self.log_det_Jzx = tf.keras.layers.Lambda(lambda x: x, name=log_det_name)(
+                    log_det_Jzxs[0]
+                )
+            else:
+                self.log_det_Jzx = tf.keras.layers.Add(name=log_det_name)(log_det_Jzxs)
+            self.TzxJ = tf.keras.Model(
+                inputs=self.input_z,
+                outputs=[self.output_x, self.log_det_Jzx],
+                name="TzxJ"
+            )
 
     def transform_xz(self, x):
         return self.Txz.predict(ensure_traj(x))
@@ -125,7 +141,7 @@ class InvNet(object):
     def transform_xzJ(self, x):
         x = ensure_traj(x)
         z, J = self.TxzJ.predict(x)
-        return z, J[:,0]
+        return z, J[:, 0]
 
     def transform_zx(self, z):
         return self.Tzx.predict(ensure_traj(z))
@@ -133,20 +149,21 @@ class InvNet(object):
     def transform_zxJ(self, z):
         z = ensure_traj(z)
         x, J = self.TzxJ.predict(z)
-        return x, J[:,0]
+        return x, J[:, 0]
 
     def energy_z(self, z, temperature=1.0):
         if self.prior == 'normal':
-            E = self.dim * np.log(np.sqrt(temperature)) + np.sum(z**2 / (2*temperature), axis=1)
+            E = self.dim * np.log(np.sqrt(temperature)) + \
+                np.sum(z**2 / (2*temperature), axis=1)
         elif self.prior == 'lognormal':
             sample_z_normal = np.log(z)
-            E = np.sum(sample_z_normal**2 / (2*temperature), axis=1) + np.sum(sample_z_normal, axis=1)
+            E = np.sum(sample_z_normal**2 / (2*temperature),
+                       axis=1) + np.sum(sample_z_normal, axis=1)
         elif self.prior == 'cauchy':
             E = np.sum(np.log(1 + (z/temperature)**2), axis=1)
         return E
 
     def sample_z(self, std=1.0, nsample=100000, return_energy=False):
-
         """ Samples from prior distribution in z and produces generated x configurations
         Parameters:
         -----------
@@ -170,16 +187,17 @@ class InvNet(object):
             sample_z = np.exp(sample_z_normal)
         elif self.prior == 'cauchy':
             from scipy.stats import cauchy
-            sample_z = cauchy(loc=0, scale=std**2).rvs(size=(nsample, self.dim))
+            sample_z = cauchy(loc=0, scale=std **
+                              2).rvs(size=(nsample, self.dim))
         else:
-            raise NotImplementedError('Sampling for prior ' + self.prior + ' is not implemented.')
+            raise NotImplementedError(
+                'Sampling for prior ' + self.prior + ' is not implemented.')
 
         if return_energy:
             energy_z = self.energy_z(sample_z)
             return sample_z, energy_z
         else:
             return sample_z
-
 
 class EnergyInvNet(InvNet):
     def __init__(self, energy_model, layers, prior='normal'):
@@ -376,7 +394,7 @@ def invnet(dim, layer_types, energy_model=None, channels=None,
             dim_L += dim_R
             dim_R = 0
             layers.append(MergeChannels(dim, channels=channels_cur))
-        
+
         elif ltype == 'P':
             if permute_atomwise:
                 order_atomwise = np.arange(dim).reshape((dim//3, 3))
