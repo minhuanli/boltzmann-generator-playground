@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import tensorflow as tf
 import deep_boltzmann.networks.losses as losses
-
+import time
 
 class MLTrainer(object):
 
@@ -26,7 +26,7 @@ class MLTrainer(object):
             self.energies_x_val = []
             self.energies_z_val = []
 
-    def train(self, x_train, x_val=None, epochs=2000, batch_size=1024, verbose=1):
+    def train(self, x_train, x_val=None, epochs=2000, batch_size=1024, verbose=1, record_time=False):
 
         inputs = []
         outputs = []
@@ -47,6 +47,13 @@ class MLTrainer(object):
         ML_model.add_metric(ml_loss, name="ML_loss")
         ML_model.compile(self.optimizer)
 
+        N = x_train.shape[0]
+        I = np.arange(N)
+
+        if x_val is not None:
+            Nt = x_val.shape[0]
+            It = np.arange(Nt)
+        
         @tf.function
         def steptrain(model_and_data):
             model, data = model_and_data
@@ -57,21 +64,18 @@ class MLTrainer(object):
             model, data = model_and_data
             return model.test_step((data,))
 
-        N = x_train.shape[0]
-        I = np.arange(N)
-
-        if x_val is not None:
-            Nt = x_val.shape[0]
-            It = np.arange(Nt)
-
         for e in range(epochs):
+            if record_time: start_time = time.time()
+
             # sample batch
             x_batch = x_train[np.random.choice(
                 I, size=batch_size, replace=True)]
+            
+            # single step train
             losses_for_this_iteration = steptrain((ML_model, [x_batch]))
+            self.loss_train.append(float(losses_for_this_iteration["ML_loss"]))
 
-            for loss_name in losses_for_this_iteration:
-                self.loss_train.append(losses_for_this_iteration[loss_name])
+            if record_time: time_this_round = round(time.time() - start_time, 3)
 
             # validate
             if x_val is not None:
@@ -79,9 +83,8 @@ class MLTrainer(object):
                     It, size=batch_size, replace=True)]
                 val_losses_for_this_iteration = steptest(
                     (ML_model, [xval_batch]))
-                for loss_name in val_losses_for_this_iteration:
-                    self.loss_val.append(
-                        val_losses_for_this_iteration[loss_name])
+                self.loss_val.append(
+                    val_losses_for_this_iteration["ML_loss"])
 
                 if self.save_test_energies:
                     z = self.bg.sample_z(nsample=batch_size)
@@ -98,6 +101,8 @@ class MLTrainer(object):
                 str_ += '{:.4f}'.format(self.loss_train[-1]) + ' '
                 if x_val is not None:
                     str_ += 'Testset {:.4f}'.format(self.loss_val[-1]) + ' '
+                if record_time:
+                    str_ += "Time: " + str(time_this_round)
                 print(str_)
                 sys.stdout.flush()
 
@@ -135,20 +140,10 @@ class FlexibleTrainer(object):
 
         self.loss_train = []
 
-    @property
-    def loss_L2_angle_penalization(self):
-        losses = []
-        for layer in self.bg.layers:
-            if hasattr(layer, "angle_loss"):
-                losses.append(layer.angle_loss)
-        loss = sum(losses)
-        return loss[..., None]
-
-    def train(self, x_train, epochs=2000, verbose=1, samplez_std=None):
+    def train(self, x_train, epochs=2000, verbose=1, samplez_std=None, record_time=False):
 
         inputs = []
         outputs = []
-        y = []
         applied_loss = []
         loss_for_metric = []
 
@@ -157,9 +152,6 @@ class FlexibleTrainer(object):
 
             outputs.append(self.bg.output_z)
             outputs.append(self.bg.log_det_Jxz)
-
-            y.append(np.zeros((self.batch_size, self.bg.dim)))
-            y.append(np.zeros(self.batch_size))
 
             ml_loss = tf.keras.layers.Lambda(losses.MLlossNormal(
                 std_z=self.std_z), name="ML_loss_layer")([self.bg.output_z, self.bg.log_det_Jxz])
@@ -170,11 +162,8 @@ class FlexibleTrainer(object):
         if self.w_KL > 0.0:
             inputs.append(self.bg.input_z)
 
-            outputs.append(self.bg.output_x)  # Check dimension of output_x
+            outputs.append(self.bg.output_x) 
             outputs.append(self.bg.log_det_Jzx)
-
-            y.append(np.zeros((self.batch_size, self.bg.dim)))
-            y.append(np.zeros(self.batch_size))
 
             kl_loss_instance = losses.KLloss(
                 self.bg.energy_model.energy_tf, self.high_energy, self.max_energy, temperature=self.temperature)
@@ -186,14 +175,11 @@ class FlexibleTrainer(object):
             loss_for_metric.append((kl_loss, "KL_loss"))
 
         if self.w_L2_angle > 0.0:
-            outputs.append(self.loss_L2_angle_penalization)
+            if self.w_KL <= 0.0: raise ValueError("Please set an nonzero w_kl when using L2 penalizaiton!")
 
-            y.append(np.zeros(self.batch_size))
-
-            L2_loss = self.loss_L2_angle_penalization
-
-            applied_loss.append(L2_loss*self.w_L2_angle)
-            loss_for_metric.append((L2_loss, "L2_angle_Loss"))
+            l2_loss = tf.keras.layers.Lambda(losses.loss_L2_angle_penalization, name="l2_loss")(self.bg)
+            applied_loss.append(l2_loss*self.w_L2_angle)
+            loss_for_metric.append((l2_loss, "L2_angle_Loss"))
 
         if self.w_xstal > 0.0:
             raise NotImplementedError
@@ -210,7 +196,14 @@ class FlexibleTrainer(object):
         if samplez_std is None:
             samplez_std = self.std_z
 
+        @tf.function
+        def steptrain(model_and_data):
+            model, data = model_and_data
+            return model.train_step((data,))
+
         for e in range(epochs):
+
+            if record_time: start_time = time.time()
 
             input_for_training = []
 
@@ -220,24 +213,26 @@ class FlexibleTrainer(object):
                 x_batch = x_train[Isel]
                 input_for_training.append(x_batch)
 
-            if self.w_KL > 0.0 or self.w_L2_angle > 0.0 or self.w_xstal > 0.0:
+            if self.w_KL > 0.0 or self.w_xstal > 0.0:
                 z_batch = samplez_std * \
                     np.random.randn(self.batch_size, self.bg.dim)
                 input_for_training.append(z_batch)
 
-            losses_for_this_iteration = dual_model.train_on_batch(
-                x=input_for_training, y=y, return_dict=True
-            )
+            # Single step train
+            losses_for_this_iteration = steptrain([dual_model, input_for_training])
 
             loss_record_this_step = []
             str_ = 'Epoch ' + str(e) + '/' + str(epochs) + ' '
-            for loss_name in losses_for_this_iteration:
-                loss_value = losses_for_this_iteration[loss_name]
-                loss_record_this_step.append(loss_value)
+            for loss_name, loss_value in losses_for_this_iteration.items():
+                loss_record_this_step.append(round(float(loss_value),4))
                 str_ += loss_name + ' '
-                str_ += '{:.4f}'.format(loss_value) + ' '
+                str_ += '{:.4f}'.format(float(loss_value)) + ' '
 
             self.loss_train.append(loss_record_this_step)
+
+            if record_time: 
+                time_this_round = round(time.time() - start_time, 3)
+                str_ += "Time: " + str(time_this_round)
 
             if verbose > 0:
                 print(str_)
