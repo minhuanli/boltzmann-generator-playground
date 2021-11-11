@@ -14,7 +14,7 @@ class MLlossNormal:
     def __call__(self, args):
         output_z, log_det_Jxz = args[0], args[1]
         energy_z = (0.5/self.std_z**2) * tf.reduce_sum(output_z**2, axis=1, keepdims=True)
-        return energy_z - log_det_Jxz 
+        return tf.reduce_mean(energy_z - log_det_Jxz)
 
 class KLloss:
     """
@@ -34,7 +34,7 @@ class KLloss:
         output_x, log_det_Jzx = args[0], args[1] 
         E = self.energy_function(output_x) / self.temperature
         Ereg = linlogcut(E, self.Ehigh, self.Emax, tf=True)
-        return Ereg - log_det_Jzx
+        return tf.reduce_mean(Ereg - log_det_Jzx)
 
 def loss_L2_angle_penalization(bg):
     losses = []
@@ -42,7 +42,7 @@ def loss_L2_angle_penalization(bg):
         if hasattr(layer, "angle_loss"):
             losses.append(layer.angle_loss)
     loss = sum(losses)
-    return loss[..., None]
+    return tf.reduce_mean(loss)
 
 
 
