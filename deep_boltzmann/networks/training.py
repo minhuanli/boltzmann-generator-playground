@@ -110,15 +110,51 @@ class MLTrainer(object):
                 sys.stdout.flush()
 
 
-# TODO: RC function, Crysatllography likelihood
-class FlexibleTrainer(object):
+# TODO: RC function
+class FlexibleTrainer:
 
     def __init__(self, bg, optimizer=None, lr=0.001, clipnorm=None,
-                 high_energy=100, max_energy=1e10, std_z=1.0, temperature=1.0,
-                 w_KL=1.0, w_ML=1.0, w_L2_angle=0.0, w_xstal=0.0):
+                 high_energy=20000, max_energy=1e10, std_z=1.0, temperature=1.0,
+                 w_ML=1.0, w_KL=1.0, w_L2_angle=0.0, w_xstal=0.0,
+                 xstalloss=None):
         """
         Parameters:
         -----------
+        bg: EnergInvNet
+            A boltzmann generator obejct
+
+        optimizer: tf.keras.optimizers, default None
+            The optimizer used in the training, if not given, will use Adam with the lr parameters
+
+        lr: float
+            learning rate for the optimizer
+
+        high_energy: float
+            The number of high energy used to scale the protein openmm energy
+
+        max_energy: float
+            The number used as a upper bound of the protein openmm energy
+
+        std_z: float, default 1.0
+            The standard deviation of the gaussiaon prior in latent space
+
+        temperature: float, default 1.0
+            The temperature factor used to scale the energy in real space
+
+        w_ML: float, default 1.0
+            The weight of ML loss 
+
+        w_KL: float, default 1.0
+            the weight of KL loss
+
+        w_L2_angle: float, default 0.0
+            the weight of L2 angle loss
+
+        w_xstal: float, default 0.0
+            the weight of crystallography loss
+
+        xstalloss: losses.Xstalloss, defualt None
+            The Xsatlloss class instance containing all crystalllography infos to compute the strucutrual factor loss.
         """
 
         self.bg = bg
@@ -133,6 +169,8 @@ class FlexibleTrainer(object):
         self.w_L2_angle = w_L2_angle
         self.w_xstal = w_xstal
 
+        self.mode = 0
+
         if optimizer is None:
             if clipnorm is None:
                 self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
@@ -144,75 +182,128 @@ class FlexibleTrainer(object):
 
         inputs = []
         outputs = []
-        applied_loss = []
-        loss_for_metric = []
+        self.loss_names = ["loss"]
 
         if self.w_ML > 0.0:
             inputs.append(self.bg.input_x)
 
             outputs.append(self.bg.output_z)
             outputs.append(self.bg.log_det_Jxz)
-
-            ml_loss = tf.keras.layers.Lambda(losses.MLlossNormal(
-                std_z=self.std_z), name="ML_loss_layer")([self.bg.output_z, self.bg.log_det_Jxz])
-
-            applied_loss.append(ml_loss*self.w_ML)
-            loss_for_metric.append((ml_loss, "ML_loss"))
+            self.mlloss = losses.MLlossNormal(std_z=self.std_z)
+            self.loss_names.append("ml_loss")
+            self.mode += 1
 
         if self.w_KL > 0.0:
             inputs.append(self.bg.input_z)
-
             outputs.append(self.bg.output_x)
             outputs.append(self.bg.log_det_Jzx)
-
-            kl_loss_instance = losses.KLloss(
+            l2_loss = losses.loss_L2_angle_penalization(self.bg)
+            outputs.append(l2_loss)
+            self.klloss = losses.KLloss(
                 self.bg.energy_model.energy_tf, self.high_energy, self.max_energy, temperature=self.temperature)
+            self.loss_names.append("kl_loss")
+            self.mode += 2
 
-            kl_loss = tf.keras.layers.Lambda(kl_loss_instance,
-                                             name="KL_loss_layer")([self.bg.output_x, self.bg.log_det_Jzx])
-
-            applied_loss.append(kl_loss*self.w_KL)
-            loss_for_metric.append((kl_loss, "KL_loss"))
+        if self.w_xstal > 0.0:
+            if self.w_KL <= 0.0:
+                inputs.append(self.bg.input_z)
+                outputs.append(self.bg.output_x)
+                outputs.append(self.bg.log_det_Jzx)
+            self.xstalloss = xstalloss
+            self.loss_names.append("xstal_loss")
+            self.mode += 4
 
         if self.w_L2_angle > 0.0:
             if self.w_KL <= 0.0:
                 raise ValueError(
-                    "Please set an nonzero w_kl when using L2 penalizaiton!")
-
-            l2_loss = tf.keras.layers.Lambda(
-                losses.loss_L2_angle_penalization, name="l2_loss")(self.bg)
-            applied_loss.append(l2_loss*self.w_L2_angle)
-            loss_for_metric.append((l2_loss, "L2_angle_Loss"))
-
-        if self.w_xstal > 0.0:
-            raise NotImplementedError
+                    "Please set an nonzero w_kl when using L2 penalization!")
+            self.loss_names.append("l2_loss")
 
         # Construct model
         self.dual_model = tf.keras.models.Model(
             inputs=inputs, outputs=outputs, name="Dual_Model")
-        self.dual_model.add_loss(applied_loss)
-        for loss, loss_name in loss_for_metric:
-            self.dual_model.add_metric(loss, name=loss_name)
-        self.dual_model.compile(optimizer=self.optimizer)
 
-    def train(self, x_train, epochs=2000,
-              batchsize_ML=2000, batchsize_KL=None, batchsize_xstal=None,
+        self.model_parameters = []
+        self.model_parameters.extend(self.dual_model.trainable_weights)
+
+        if self.w_xstal > 0.0:
+            self.model_parameters.extend(self.xstalloss.trainable_weights)
+
+    @tf.function
+    def steptrain_ml(self, input_for_training):
+        with tf.GradientTape() as tape:
+            output_z, log_det_Jxz = self.dual_model(input_for_training)
+            ml_loss = self.mlloss([output_z, log_det_Jxz])
+            loss = self.w_ML*ml_loss
+        grads = tape.gradient(loss, self.model_parameters)
+        self.optimizer.apply_gradients(zip(grads, self.model_parameters))
+        return [loss, ml_loss]
+
+    @tf.function
+    def steptrain_kl(self, input_for_training):
+        with tf.GradientTape() as tape:
+            output_x, log_det_Jzx, l2_loss = self.dual_model(
+                input_for_training)
+            kl_loss = self.klloss([output_x, log_det_Jzx])
+            loss = self.w_KL*kl_loss + self.w_L2_angle*l2_loss
+        grads = tape.gradient(loss, self.model_parameters)
+        self.optimizer.apply_gradients(zip(grads, self.model_parameters))
+        return [loss, kl_loss, l2_loss]
+
+    @tf.function
+    def steptrain_mlkl(self, input_for_training):
+        with tf.GradientTape() as tape:
+            output_z, log_det_Jxz, output_x, log_det_Jzx, l2_loss = self.dual_model(
+                input_for_training)
+            ml_loss = self.mlloss([output_z, log_det_Jxz])
+            kl_loss = self.klloss([output_x, log_det_Jzx])
+            loss = self.w_ML*ml_loss + self.w_KL*kl_loss + self.w_L2_angle*l2_loss
+        grads = tape.gradient(loss, self.model_parameters)
+        self.optimizer.apply_gradients(zip(grads, self.model_parameters))
+        return [loss, ml_loss, kl_loss, l2_loss]
+
+    @tf.function
+    def steptrain_klxstal(self, input_for_training):
+        with tf.GradientTape() as tape:
+            output_x, log_det_Jzx, l2_loss = self.dual_model(
+                input_for_training)
+            kl_loss = self.klloss([output_x, log_det_Jzx])
+            xstal_loss = self.xstalloss(
+                output_x[0:self.batchsize_xstal], self.batchsize_xstal)
+            loss = self.w_KL*kl_loss + self.w_xstal*xstal_loss + self.w_L2_angle*l2_loss
+        grads = tape.gradient(loss, self.model_parameters)
+        self.optimizer.apply_gradients(zip(grads, self.model_parameters))
+        return [loss, kl_loss, xstal_loss, l2_loss]
+
+    @tf.function
+    def steptrain_mlklxstal(self, input_for_training):
+        with tf.GradientTape() as tape:
+            output_z, log_det_Jxz, output_x, log_det_Jzx, l2_loss = self.dual_model(
+                input_for_training)
+            ml_loss = self.mlloss([output_z, log_det_Jxz])
+            kl_loss = self.klloss([output_x, log_det_Jzx])
+            xstal_loss = self.xstalloss(
+                output_x[0:self.batchsize_xstal], self.batchsize_xstal)
+            loss = self.w_ML*ml_loss + self.w_KL*kl_loss + \
+                self.w_xstal*xstal_loss + self.w_L2_angle*l2_loss
+        grads = tape.gradient(loss, self.model_parameters)
+        self.optimizer.apply_gradients(zip(grads, self.model_parameters))
+        return [loss, ml_loss, kl_loss, xstal_loss, l2_loss]
+
+    def train(self, x_train=None, epochs=2000,
+              batchsize_ML=1024, batchsize_KL=None, batchsize_xstal=1,
               verbose=1, samplez_std=None, record_time=False):
 
-        I = np.arange(x_train.shape[0])
+        if self.w_ML > 0.0:
+            I = np.arange(x_train.shape[0])
+
         if samplez_std is None:
             samplez_std = self.std_z
-        
+
         if batchsize_KL is None:
             batchsize_KL = batchsize_ML
-        
-        if batchsize_xstal is None:
-            batchsize_xstal = 5
 
-        @tf.function
-        def steptrain(model_and_data):
-            model, data = model_and_data
-            return model.train_step((data,))
+        self.batchsize_xstal = batchsize_xstal
 
         for e in range(epochs):
 
@@ -227,28 +318,54 @@ class FlexibleTrainer(object):
                 x_batch = x_train[Isel]
                 input_for_training.append(x_batch)
 
-            if self.w_KL > 0.0 or self.w_xstal > 0.0:
+            if self.w_KL > 0.0:
                 z_batch = samplez_std * \
                     np.random.randn(batchsize_KL, self.bg.dim)
                 input_for_training.append(z_batch)
 
-            # Single step train
-            losses_for_this_iteration = steptrain(
-                [self.dual_model, input_for_training])
+            if self.mode == 1:
+                # ML
+                losses_for_this_iteration = self.steptrain_ml(
+                    input_for_training)
 
-            loss_record_this_step = []
-            str_ = 'Epoch ' + str(e) + '/' + str(epochs) + ' '
-            for loss_name, loss_value in losses_for_this_iteration.items():
-                loss_record_this_step.append(round(float(loss_value), 4))
-                str_ += loss_name + ' '
-                str_ += '{:.4f}'.format(float(loss_value)) + ' '
+            elif self.mode == 2:
+                # KL
+                losses_for_this_iteration = self.steptrain_kl(
+                    input_for_training)
 
-            self.loss_train.append(loss_record_this_step)
+            elif self.mode == 3:
+                # ML + KL
+                losses_for_this_iteration = self.steptrain_mlkl(
+                    input_for_training)
+
+            elif self.mode == 6:
+                # KL + Xstal
+                losses_for_this_iteration = self.steptrain_klxstal(
+                    input_for_training)
+
+            elif self.mode == 7:
+                # ML + KL + XSTALL loss
+                losses_for_this_iteration = self.steptrain_mlklxstal(
+                    input_for_training)
+
+            else:
+                raise NotImplementedError(
+                    "Currently only support your choice of weights!")
+
+            str_ = "Epoch " + str(e) + " / " + str(epochs) + "  "
+            loss_this_round = []
+            for i, loss_name in enumerate(self.loss_names):
+                str_ += loss_name + ": "
+                str_ += "{:.4f}".format(
+                    float(losses_for_this_iteration[i])) + "  "
+                loss_this_round.append(float(losses_for_this_iteration[i]))
 
             if record_time:
                 time_this_round = round(time.time() - start_time, 3)
                 str_ += "Time: " + str(time_this_round)
 
-            if verbose > 0:
+            self.loss_train.append(loss_this_round)
+
+            if verbose:
                 print(str_)
                 sys.stdout.flush()
