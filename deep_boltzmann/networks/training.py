@@ -113,7 +113,7 @@ class MLTrainer(object):
 # TODO: RC function, Crysatllography likelihood
 class FlexibleTrainer(object):
 
-    def __init__(self, bg, optimizer=None, lr=0.001, clipnorm=None, batch_size=1024,
+    def __init__(self, bg, optimizer=None, lr=0.001, clipnorm=None,
                  high_energy=100, max_energy=1e10, std_z=1.0, temperature=1.0,
                  w_KL=1.0, w_ML=1.0, w_L2_angle=0.0, w_xstal=0.0):
         """
@@ -123,7 +123,6 @@ class FlexibleTrainer(object):
 
         self.bg = bg
         self.lr = lr
-        self.batch_size = batch_size
         self.high_energy = high_energy
         self.max_energy = max_energy
         self.std_z = std_z
@@ -196,11 +195,19 @@ class FlexibleTrainer(object):
             self.dual_model.add_metric(loss, name=loss_name)
         self.dual_model.compile(optimizer=self.optimizer)
 
-    def train(self, x_train, epochs=2000, verbose=1, samplez_std=None, record_time=False):
+    def train(self, x_train, epochs=2000,
+              batchsize_ML=2000, batchsize_KL=None, batchsize_xstal=None,
+              verbose=1, samplez_std=None, record_time=False):
 
         I = np.arange(x_train.shape[0])
         if samplez_std is None:
             samplez_std = self.std_z
+        
+        if batchsize_KL is None:
+            batchsize_KL = batchsize_ML
+        
+        if batchsize_xstal is None:
+            batchsize_xstal = 5
 
         @tf.function
         def steptrain(model_and_data):
@@ -216,13 +223,13 @@ class FlexibleTrainer(object):
 
             if self.w_ML > 0.0:
                 # sample batch
-                Isel = np.random.choice(I, size=self.batch_size, replace=True)
+                Isel = np.random.choice(I, size=batchsize_ML, replace=True)
                 x_batch = x_train[Isel]
                 input_for_training.append(x_batch)
 
             if self.w_KL > 0.0 or self.w_xstal > 0.0:
                 z_batch = samplez_std * \
-                    np.random.randn(self.batch_size, self.bg.dim)
+                    np.random.randn(batchsize_KL, self.bg.dim)
                 input_for_training.append(z_batch)
 
             # Single step train
