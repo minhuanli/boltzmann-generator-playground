@@ -116,7 +116,7 @@ class FlexibleTrainer:
     def __init__(self, bg, optimizer=None, lr=0.001, clipnorm=None,
                  high_energy=20000, max_energy=1e10, std_z=1.0, temperature=1.0,
                  w_ML=1.0, w_KL=1.0, w_L2_angle=0.0, w_xstal=0.0,
-                 xstalloss=None):
+                 xstalloss=None, validation=True):
         """
         Parameters:
         -----------
@@ -169,6 +169,8 @@ class FlexibleTrainer:
         self.w_L2_angle = w_L2_angle
         self.w_xstal = w_xstal
 
+        self.validation = validation
+
         self.mode = 0
 
         if optimizer is None:
@@ -211,6 +213,10 @@ class FlexibleTrainer:
                 outputs.append(self.bg.log_det_Jzx)
             self.xstalloss = xstalloss
             self.loss_names.append("xstal_loss")
+            if self.validation:
+                self.loss_names.append("xstal_loss_free")
+                self.loss_names.append("r_work")
+                self.loss_names.append("r_free")
             self.mode += 4
 
         if self.w_L2_angle > 0.0:
@@ -268,12 +274,15 @@ class FlexibleTrainer:
             output_x, log_det_Jzx, l2_loss = self.dual_model(
                 input_for_training)
             kl_loss = self.klloss([output_x, log_det_Jzx])
-            xstal_loss = self.xstalloss(
+            xstal_loss, xstal_loss_free, r_work, r_free = self.xstalloss(
                 output_x[0:self.batchsize_xstal], self.batchsize_xstal)
             loss = self.w_KL*kl_loss + self.w_xstal*xstal_loss + self.w_L2_angle*l2_loss
         grads = tape.gradient(loss, self.model_parameters)
         self.optimizer.apply_gradients(zip(grads, self.model_parameters))
-        return [loss, kl_loss, xstal_loss, l2_loss]
+        if self.validation:
+            return [loss, kl_loss, xstal_loss, xstal_loss_free, r_work, r_free, l2_loss]
+        else:
+            return [loss, kl_loss, xstal_loss, l2_loss]
 
     @tf.function
     def steptrain_mlklxstal(self, input_for_training):
@@ -282,13 +291,16 @@ class FlexibleTrainer:
                 input_for_training)
             ml_loss = self.mlloss([output_z, log_det_Jxz])
             kl_loss = self.klloss([output_x, log_det_Jzx])
-            xstal_loss = self.xstalloss(
+            xstal_loss, xstal_loss_free, r_work, r_free = self.xstalloss(
                 output_x[0:self.batchsize_xstal], self.batchsize_xstal)
             loss = self.w_ML*ml_loss + self.w_KL*kl_loss + \
                 self.w_xstal*xstal_loss + self.w_L2_angle*l2_loss
         grads = tape.gradient(loss, self.model_parameters)
         self.optimizer.apply_gradients(zip(grads, self.model_parameters))
-        return [loss, ml_loss, kl_loss, xstal_loss, l2_loss]
+        if self.validation:
+            return [loss, ml_loss, kl_loss, xstal_loss, xstal_loss_free, r_work, r_free, l2_loss]
+        else:
+            return [loss, ml_loss, kl_loss, xstal_loss, l2_loss]
 
     def train(self, x_train=None, epochs=2000,
               batchsize_ML=1024, batchsize_KL=None, batchsize_xstal=1,
@@ -349,10 +361,9 @@ class FlexibleTrainer:
                     input_for_training)
 
             else:
-                raise NotImplementedError(
-                    "Currently only support your choice of weights!")
+                raise NotImplementedError("Currently only support ")
 
-            str_ = "Epoch " + str(e) + " / " + str(epochs) + "  "
+            str_ = "Epoch " + str(e) + "/" + str(epochs) + " "
             loss_this_round = []
             for i, loss_name in enumerate(self.loss_names):
                 str_ += loss_name + ": "
