@@ -20,6 +20,8 @@ class MLTrainer(object):
             else:
                 self.optimizer = tf.keras.optimizers.Adam(
                     learning_rate=lr, clipnorm=clipnorm)
+        else:
+            self.optimizer = optimizer
 
         self.loss_train = []
         self.loss_val = []
@@ -179,6 +181,8 @@ class FlexibleTrainer:
             else:
                 self.optimizer = tf.keras.optimizers.Adam(
                     learning_rate=lr, clipnorm=clipnorm)
+        else:
+            self.optimizer = optimizer
 
         self.loss_train = []
 
@@ -232,8 +236,9 @@ class FlexibleTrainer:
         self.model_parameters = []
         self.model_parameters.extend(self.dual_model.trainable_weights)
 
-        if self.w_xstal > 0.0:
-            self.model_parameters.extend(self.xstalloss.trainable_weights)
+        # Seperate the scale training and the flow training
+        # if self.w_xstal > 0.0:
+        #     self.model_parameters.extend(self.xstalloss.trainable_weights)
 
     @tf.function
     def steptrain_ml(self, input_for_training):
@@ -304,7 +309,7 @@ class FlexibleTrainer:
 
     def train(self, x_train=None, epochs=2000,
               batchsize_ML=1024, batchsize_KL=None, batchsize_xstal=1,
-              verbose=1, samplez_std=None, record_time=False):
+              verbose=1, samplez_std=None, record_time=False, start_count=0):
 
         if self.w_ML > 0.0:
             I = np.arange(x_train.shape[0])
@@ -363,8 +368,8 @@ class FlexibleTrainer:
             else:
                 raise NotImplementedError("Currently only support ")
 
-            str_ = "Epoch " + str(e) + "/" + str(epochs) + " "
-            loss_this_round = []
+            str_ = "Epoch " + str(start_count+e) + "/" + str(start_count+epochs) + " "
+            loss_this_round = [start_count+e]
             for i, loss_name in enumerate(self.loss_names):
                 str_ += loss_name + ": "
                 str_ += "{:.4f}".format(
@@ -380,3 +385,65 @@ class FlexibleTrainer:
             if verbose:
                 print(str_)
                 sys.stdout.flush()
+
+
+class ScaleTrainer:
+
+    def __init__(self, bg, xstalloss, optimizer=None, lr=0.0005, samplez_std=1.0, batchsize=3):
+        z_batch = samplez_std * np.random.randn(batchsize, bg.dim)
+        self.output_x = bg.Tzx.predict(z_batch)
+        self.batchsize = batchsize
+        self.xstalloss = xstalloss
+        self.loss_names = ["xstal_loss", "xstal_loss_free", "r_work", "r_free"]
+        self.loss_train = []
+        
+        if optimizer is None:
+            self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+        else:
+            self.optimizer = optimizer
+        
+    @tf.function
+    def steptrain(self):
+        with tf.GradientTape() as tape:
+            xstal_loss, xstal_loss_free, r_work, r_free = self.xstalloss(self.output_x, self.batchsize)
+        grads = tape.gradient(xstal_loss, self.xstalloss.trainable_weights)
+        self.optimizer.apply_gradients(zip(grads, self.xstalloss.trainable_weights))
+        return [xstal_loss, xstal_loss_free, r_work, r_free] 
+        
+    def train(self, epochs=2000, verbose=1, record_time=False, start_count=0):
+
+        for e in range(epochs):
+            
+            if record_time:
+                start_time = time.time() 
+            
+            losses_for_this_iteration = self.steptrain()
+            
+            str_ = "Epoch " + str(start_count+e) + "/" + str(start_count+epochs) + " "
+            loss_this_round = [start_count+e]
+            for i, loss_name in enumerate(self.loss_names):
+                str_ += loss_name + ": "
+                str_ += "{:.4f}".format(
+                    float(losses_for_this_iteration[i])) + "  "
+                loss_this_round.append(float(losses_for_this_iteration[i]))
+
+            if record_time:
+                time_this_round = round(time.time() - start_time, 3)
+                str_ += "Time: " + str(time_this_round)
+
+            self.loss_train.append(loss_this_round)
+
+            if verbose:
+                print(str_)
+                sys.stdout.flush()
+
+
+
+        
+
+
+        
+
+
+
+        

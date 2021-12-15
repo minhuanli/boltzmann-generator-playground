@@ -100,13 +100,13 @@ class XstalLoss(tf.keras.models.Model):
         return F_total
         
     def __call__(self, output_x, batchsize, rotate=True):
-        F_total = self.x2Fcalc(output_x, batchsize, rotate=rotate)
-        F_model = tf.abs(F_total)
-        Z_work = tf.gather(self.Fo, self.rwork_id) - tf.gather(F_model,self.rwork_id, axis=1)
-        Z_free = tf.gather(self.Fo, self.rfree_id) - tf.gather(F_model,self.rfree_id, axis=1)
-        loss_work = tf.reduce_mean(tf.reduce_sum(Z_work**2, axis=1, keepdims=True))
-        loss_free = tf.reduce_mean(tf.reduce_sum(Z_free**2, axis=1, keepdims=True))
-        r_work, r_free = r_factor(self.Fo, F_model[0], self.rwork_id, self.rfree_id)    
+        F_total = self.x2Fcalc(output_x, batchsize, rotate=rotate) # Shape [N_batch, N_HKLs]
+        F_model = tf.abs(tf.reduce_mean(F_total, axis=0)) # Shape [N_HKLs,]
+        Z_work = tf.gather(self.Fo, self.rwork_id) - tf.gather(F_model,self.rwork_id) # Shape [N_HKLs,]
+        Z_free = tf.gather(self.Fo, self.rfree_id) - tf.gather(F_model,self.rfree_id)
+        loss_work = tf.reduce_sum(Z_work**2) 
+        loss_free = tf.reduce_sum(Z_free**2)
+        r_work, r_free = r_factor(self.Fo, F_model, self.rwork_id, self.rfree_id)    
         return loss_work, loss_free, r_work, r_free
 
 def loss_L2_angle_penalization(bg):
