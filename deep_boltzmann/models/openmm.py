@@ -45,7 +45,9 @@ class OpenMMEnergy(object):
 
     def _get_state(self, **kwargs):
         return self._openmm_context.getState(**kwargs)
-
+   
+    
+    # A numpy call
     def __call__(self, batch, n_steps=0):
         """batch: (B, N*D) """
         
